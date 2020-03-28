@@ -20,20 +20,22 @@ class CPCModel(nn.Module):
 
         self.z2target = nn.Conv2d(1024, self.target_dim, (1, 1))
         self.ctx2pred = nn.ModuleList([nn.Conv2d(1024, self.target_dim, (1, 1))
-                                       for i in range(self.steps_to_ignore, self.steps_to_predict)])
+                                       for i in range(self.steps_to_ignore, self.steps_to_ignore + self.steps_to_predict)])
 
     def forward(self, images):
         batch_size = images.shape[0]
         patches = images_to_cpc_patches(images).detach() # (N*49, C, 64, 64)
+
         latents = self.encoder(patches).mean(dim=[2, 3]) # (N*49, 1024)
+
         latents = latents.view(batch_size, 7, 7, -1).permute(0, 3, 1, 2).contiguous()
         context = self.pixelcnn(latents) # (N, 1024, 7, 7)
 
         col_dim, row_dim = 7, 7
-        targets = self.z2target(context).view(-1, self.target_dim) # (N*49, 64)
+        targets = self.z2target(latents).view(-1, self.target_dim) # (N*49, 64)
 
         loss = 0.
-        for i in range(self.steps_to_ignore, self.steps_to_predict):
+        for i in range(self.steps_to_ignore, self.steps_to_ignore + self.steps_to_predict):
             col_dim_i = col_dim - i - 1
             total_elements = batch_size * col_dim_i * row_dim
 
@@ -50,6 +52,7 @@ class CPCModel(nn.Module):
             labels = torch.LongTensor(labels).to(logits.get_device())
 
             loss = loss + F.cross_entropy(logits, labels)
+
         return loss
 
     def encode(self, images):

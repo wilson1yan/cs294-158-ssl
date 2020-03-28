@@ -15,7 +15,7 @@ from deepul_helper.models import CPCModel
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default='imagenet')
-parser.add_argument('-b', '--batch_size', type=int, default=16, help='batch size PER GPU')
+parser.add_argument('-b', '--batch_size', type=int, default=32, help='batch size PER GPU')
 parser.add_argument('--lr', type=float, default=2e-4)
 parser.add_argument('-e', '--epochs', type=int, default=100)
 parser.add_argument('-i', '--log_interval', type=int, default=10)

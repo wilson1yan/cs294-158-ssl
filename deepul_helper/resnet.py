@@ -81,10 +81,10 @@ class ResNet(nn.Module):
         super(ResNet, self).__init__()
         self.output_dim = output_dim
         self.use_batchnorm = use_batchnorm
-        self.in_planes = 64
+        self.in_planes = 32
 
-        self.conv1 = nn.Conv2d(input_channels, 64, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn1 = ToggleBatchNorm2d(use_batchnorm, 64)
+        self.conv1 = nn.Conv2d(input_channels, 32, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn1 = ToggleBatchNorm2d(use_batchnorm, 32)
         self.layer1 = self._make_layer(block, 64, num_blocks[0], stride=2)
         self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)

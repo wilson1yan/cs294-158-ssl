@@ -10,24 +10,28 @@ import torch.multiprocessing as mp
 from torchvision.datasets import ImageFolder
 from torchvision.transforms import transforms
 
-from deepul_helper.models import CPCModel
+from deepul_helper.models import DenoisingAutoencoder, RotationPrediction, CPCModel, SimCLR
+from deepul_helper.utils import AverageMeter, ProgressMeter
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default='imagenet')
+parser.add_argument('-t', '--task', type=str, required=True,
+                    help='self-supervised learning task (denoising_autoencoder|rotation|cpc|simclr)')
 parser.add_argument('-b', '--batch_size', type=int, default=32, help='batch size PER GPU')
 parser.add_argument('--lr', type=float, default=2e-4)
 parser.add_argument('-e', '--epochs', type=int, default=100)
 parser.add_argument('-i', '--log_interval', type=int, default=10)
-parser.add_argument('-o', '--output_dir', type=str, default='cpc')
 
 
 best_loss = 0
 
 def main():
     args = parser.parse_args()
+    assert args.task in ['denoising_autoencoder', 'rotation', 'cpc', 'simclr']
+    
     args.dataset = osp.join('data', args.dataset)
-    args.output_dir = osp.join('results', args.output_dir)
+    args.output_dir = osp.join('results', args.task)
     if not osp.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
@@ -42,7 +46,16 @@ def main_worker(gpu, ngpus, args):
     dist.init_process_group(backend='nccl', init_method='tcp://localhost:23456',
                             world_size=ngpus, rank=gpu)
 
-    model = CPCModel()
+    if args.task == 'denoising_autoencoder':
+        model = DenoisingAutoencoder()
+    elif args.task == 'rotation':
+        model = RotationPrediction()
+    elif args.task == 'cpc':
+        model = CPCModel()
+    elif args.task == 'simclr':
+        model = SimCLR()
+    else:
+        raise Exception('Invalid task:', args.task)
 
     torch.backends.cudnn.benchmark = True
     torch.cuda.set_device(gpu)
@@ -175,47 +188,6 @@ def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar'):
     torch.save(state, filename)
     if is_best:
         shutil.copyfile(filename, osp.join(args.output_dir, 'model_best.pth.tar'))
-
-
-class AverageMeter(object):
-    """Computes and stores the average and current value"""
-    def __init__(self, name, fmt=':f'):
-        self.name = name
-        self.fmt = fmt
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
-    def __str__(self):
-        fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
-        return fmtstr.format(**self.__dict__)
-
-
-class ProgressMeter(object):
-    def __init__(self, num_batches, meters, prefix=""):
-        self.batch_fmtstr = self._get_batch_fmtstr(num_batches)
-        self.meters = meters
-        self.prefix = prefix
-
-    def display(self, batch):
-        entries = [self.prefix + self.batch_fmtstr.format(batch)]
-        entries += [str(meter) for meter in self.meters]
-        print('\t'.join(entries))
-
-    def _get_batch_fmtstr(self, num_batches):
-        num_digits = len(str(num_batches // 1))
-        fmt = '{:' + str(num_digits) + 'd}'
-        return '[' + fmt + '/' + fmt.format(num_batches) + ']'
 
 
 if __name__ == '__main__':

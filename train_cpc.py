@@ -22,7 +22,7 @@ parser.add_argument('-i', '--log_interval', type=int, default=10)
 parser.add_argument('-o', '--output_dir', type=str, default='cpc')
 
 
-best_loss = 0
+best_loss = float('inf')
 
 def main():
     args = parser.parse_args()

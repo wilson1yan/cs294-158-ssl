@@ -60,6 +60,7 @@ def main_worker(gpu, ngpus, args):
             transforms.RandomHorizontalFlip(),
             transforms.Grayscale(),
             transforms.ToTensor(),
+            transforms.Normalize((0.5,), (0.5,)),
         ])
     )
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -75,8 +76,8 @@ def main_worker(gpu, ngpus, args):
             transforms.Resize(300),
             transforms.CenterCrop(256),
             transforms.Grayscale(),
+            transforms.ToTensor(),
             transforms.Normalize((0.5,), (0.5,)),
-            transforms.ToTensor()
         ])
     )
     val_loader = torch.utils.data.DataLoader(
@@ -99,7 +100,7 @@ def main_worker(gpu, ngpus, args):
                 'state_dict': model.state_dict(),
                 'best_loss': best_loss,
                 'optimizer': optimizer.state_dict(),
-            }, is_best)
+            }, is_best, args)
 
 
 def train(train_loader, model, optimizer, epoch, args):
@@ -156,7 +157,7 @@ def validate(val_loader, model, args):
         for i, (images, _) in enumerate(val_loader):
             # compute and measure loss
             images = images.cuda(args.gpu, non_blocking=True)
-            loss = model.loss(images)
+            loss = model(images)
             losses.update(loss.item(), images.shape[0])
 
             # measure elapsed time
@@ -169,7 +170,7 @@ def validate(val_loader, model, args):
     return losses.avg
 
 
-def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
+def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar'):
     filename = osp.join(args.output_dir, filename)
     torch.save(state, filename)
     if is_best:

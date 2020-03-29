@@ -7,7 +7,39 @@ import torch.nn.functional as F
 from deepul_helper.utils import images_to_cpc_patches
 from deepul_helper.resnet import ResNet18
 
+########################################## De-noising Autoencoder ####################################################
+
+class DenoisingAutoencoder(nn.Module):
+    latent_dim = "FILL"
+
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, images):
+        pass
+
+    def encode(self, images):
+        pass
+
+########################################## Rotation Prediction #######################################################
+
+class RotationPrediction(nn.Module):
+    latent_dim = "FILL"
+
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, images):
+        pass
+
+    def encode(self, images):
+        pass
+
+########################################## Contrastive Predictive Coding #############################################
+
 class CPCModel(nn.Module):
+    latent_dim = 1024
+    
     def __init__(self):
         super().__init__()
         self.target_dim = 64
@@ -91,3 +123,16 @@ class PixelCNN(nn.Module):
         return F.relu(x)
 
 
+########################################## SimCLR ##################################################################
+
+class SimCLR(nn.Module):
+    latent_dim = "FILL"
+
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, images):
+        pass
+
+    def encode(self, images):
+        pass

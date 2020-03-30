@@ -15,7 +15,7 @@ from deepul_helper.utils import AverageMeter, ProgressMeter
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', type=str, default='imagenet')
+parser.add_argument('-d', '--dataset', type=str, default='imagenet100')
 parser.add_argument('-t', '--task', type=str, required=True,
                     help='self-supervised learning task (denoising_autoencoder|rotation|cpc|simclr)')
 parser.add_argument('-b', '--batch_size', type=int, default=32, help='batch size PER GPU')
@@ -29,7 +29,7 @@ best_loss = float('inf')
 def main():
     args = parser.parse_args()
     assert args.task in ['denoising_autoencoder', 'rotation', 'cpc', 'simclr']
-    
+
     args.dataset = osp.join('data', args.dataset)
     args.output_dir = osp.join('results', args.task)
     if not osp.exists(args.output_dir):

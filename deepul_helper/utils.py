@@ -24,6 +24,16 @@ def quantize(img, n_bits):
     return img
 
 
+def remove_module_state_dict(state_dict):
+    """Clean state_dict keys if original state dict was saved from DistributedDataParallel
+       and loaded without"""
+    new_state_dict = OrderedDict()
+    for k, v in state_dict.items():
+        name = k[7:]
+        new_state_dict[name] = v
+    return new_state_dict
+
+
 class AverageMeter(object):
     """Computes and stores the average and current value"""
     def __init__(self, name, fmt=':f'):

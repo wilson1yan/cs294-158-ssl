@@ -11,28 +11,30 @@ import torch.optim as optim
 
 from deepul_helper.data import get_datasets
 from deepul_helper.models import CPCModel
-from deepul_helper.utils import AverageMeter, ProgressMeter
+from deepul_helper.utils import AverageMeter, ProgressMeter, remove_module_state_dict
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--dataset', type=str, default='imagenet')
-    parser.add_argument('-m', '--model', type=str, required=True, 
+    parser.add_argument('-m', '--model', type=str, required=True,
                         help='denoising_autoencoder|rotation|cpc|simclr')
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('-e', '--epochs', type=int, default=50)
-    parser.add_argument('-b', 'batch_size', type=int, default=128)
+    parser.add_argument('-b', '--batch_size', type=int, default=128)
     parser.add_argument('-i', '--log_interval', type=int, default=10)
     args = parser.parse_args()
 
     args.output_dir = osp.join('results', args.model, 'linear_classifier')
     if not osp.exists(args.output_dir):
         os.makedirs(args.output_dir)
-    
+
     if args.model == 'cpc':
         model = CPCModel().cuda()
         model_path = osp.join('results', args.model, 'model_best.pth.tar')
-        model.load_state_dict(torch.load(model_path)['state_dict'])
+        checkpoint = torch.load(model_path, map_location='cuda')
+        state_dict = remove_module_state_dict(checkpoint['state_dict'])
+        model.load_state_dict(state_dict)
         model.eval()
     else:
         raise Exception('Invalid model:', args.model)
@@ -78,7 +80,7 @@ def train(train_loader, model, linear_classifier, optimizer, epoch, args):
     )
 
     linear_classifier.train()
-    
+
     end = time.time()
     for i, (images, target) in enumerate(train_loader):
         data_time.update(time.time() - end)
@@ -140,19 +142,19 @@ def validate(test_loader, model, linear_classifier, args):
 
             if i % args.log_interval == 0:
                 progress.display(i)
-    
+
     print(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
           .format(top1=top1, top5=top5))
 
     return top1.avg
 
-    
+
 def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar'):
     filename = osp.join(args.output_dir, filename)
     torch.save(state, filename)
     if is_best:
         shutil.copyfile(filename, osp.join(args.output_dir, 'model_best.pth.tar'))
-    
+
 
 def accuracy(output, target, topk=(1,)):
     with torch.no_grad():
@@ -168,7 +170,7 @@ def accuracy(output, target, topk=(1,)):
             correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
-    
+
 
 if __name__ == '__main__':
     main()

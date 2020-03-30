@@ -35,14 +35,15 @@ def get_datasets(dataset):
         root = osp.join('data', dataset)
         train_dataset = datasets.CIFAR10(root, train=True, download=True,
                                          transform=transforms.Compose([
-                                             transforms.RandomCrop(32, padding=4),
+                                             transforms.Resize(300),
                                              transforms.RandomHorizontalFlip(),
                                              transforms.Grayscale(),
                                              transforms.ToTensor(),
                                              transforms.Normalize((0.5,), (0.5,))
                                          ]))
         test_dataset = datasets.CIFAR10(root, train=False, download=True,
-                                        transforms=transforms.Compose([
+                                        transform=transforms.Compose([
+                                            transforms.Resize(300),
                                             transforms.Grayscale(),
                                             transforms.ToTensor(),
                                             transforms.Normalize((0.5,), (0.5,))

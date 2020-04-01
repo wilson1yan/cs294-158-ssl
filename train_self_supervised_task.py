@@ -10,7 +10,7 @@ import torch.multiprocessing as mp
 from torchvision.datasets import ImageFolder
 from torchvision.transforms import transforms
 
-from deepul_helper.models import DenoisingAutoencoder, RotationPrediction, CPCModel, SimCLR
+from deepul_helper.models import ContextEncoder, RotationPrediction, CPCModel, SimCLR
 from deepul_helper.utils import AverageMeter, ProgressMeter
 
 
@@ -31,7 +31,7 @@ def main():
     assert args.task in ['denoising_autoencoder', 'rotation', 'cpc', 'simclr']
 
     args.dataset = osp.join('data', args.dataset)
-    args.output_dir = osp.join('results', args.task)
+    args.output_dir = osp.join('results', f"{args.dataset}_{args.task}")
     if not osp.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
@@ -46,8 +46,8 @@ def main_worker(gpu, ngpus, args):
     dist.init_process_group(backend='nccl', init_method='tcp://localhost:23456',
                             world_size=ngpus, rank=gpu)
 
-    if args.task == 'denoising_autoencoder':
-        model = DenoisingAutoencoder()
+    if args.task == 'context_encoder':
+        model = ContextEncoder()
     elif args.task == 'rotation':
         model = RotationPrediction()
     elif args.task == 'cpc':

@@ -36,12 +36,12 @@ def get_transform(task, train=True):
         pass
     else:
         raise Exception('Invalid task:', task)
-    
+
     return transform
 
 
 def get_datasets(dataset, task):
-    if dataset == 'imagenet':
+    if 'imagenet' in dataset:
         train_dir = osp.join('data', dataset, 'train')
         val_dir = osp.join('data', dataset, 'val')
         train_dataset = datasets.ImageFolder(

@@ -163,6 +163,7 @@ class PixelCNN(nn.Module):
                 nn.ReLU(),
                 nn.ZeroPad2d((1, 1, 0, 0)),
                 nn.Conv2d(256, 256, (1, 3)),
+                nn.ReLU(),
                 nn.ZeroPad2d((0, 0, 1, 0)),
                 nn.Conv2d(256, 256, (2, 1)),
                 nn.ReLU(),
@@ -171,9 +172,11 @@ class PixelCNN(nn.Module):
             self.net.append(block)
 
     def forward(self, x):
-        for block in self.net:
+        for i, block in enumerate(self.net):
             x = block(x) + x
-        return F.relu(x)
+            if i < len(self.net) - 1:
+                x = F.relu(x)
+        return x
 
 
 ########################################## SimCLR ##################################################################

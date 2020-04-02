@@ -16,8 +16,8 @@ from deepul_helper.data import get_datasets
 parser = argparse.ArgumentParser()
 parser.add_argument('-d', '--dataset', type=str, default='imagenet100')
 parser.add_argument('-t', '--task', type=str, required=True,
-                    help='self-supervised learning task (denoising_autoencoder|rotation|cpc|simclr)')
-parser.add_argument('-b', '--batch_size', type=int, default=32, help='batch size PER GPU')
+                    help='self-supervised learning task (context_encoder|rotation|cpc|simclr)')
+parser.add_argument('-b', '--batch_size', type=int, default=32, help='batch size total for all gpus')
 parser.add_argument('--lr', type=float, default=2e-4)
 parser.add_argument('-e', '--epochs', type=int, default=100)
 parser.add_argument('-i', '--log_interval', type=int, default=10)
@@ -27,7 +27,7 @@ best_loss = float('inf')
 
 def main():
     args = parser.parse_args()
-    assert args.task in ['denoising_autoencoder', 'rotation', 'cpc', 'simclr']
+    assert args.task in ['context_encoder', 'rotation', 'cpc', 'simclr']
 
     args.dataset = osp.join('data', args.dataset)
     args.output_dir = osp.join('results', f"{args.dataset}_{args.task}")
@@ -44,6 +44,7 @@ def main_worker(gpu, ngpus, args):
     print(f'Starting process on GPU: {gpu}')
     dist.init_process_group(backend='nccl', init_method='tcp://localhost:23456',
                             world_size=ngpus, rank=gpu)
+    args.batch_size = args.batch_size // ngpus
 
     if args.task == 'context_encoder':
         model = ContextEncoder()

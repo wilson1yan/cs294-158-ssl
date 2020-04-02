@@ -26,13 +26,13 @@ class ContextEncoder(nn.Module):
             nn.BatchNorm2d(64),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(64, 128, 4, stride=2, padding=1), # 16 x 16
-            nn.Batchnorm2d(128),
+            nn.BatchNorm2d(128),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(128, 256, 4, stride=2, padding=1), # 8 x 8
-            nn.Batchnorm2d(256),
+            nn.BatchNorm2d(256),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(256, 512, 4, stride=2, padding=1), # 4 x 4
-            nn.Batchnorm2d(512),
+            nn.BatchNorm2d(512),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(512, 1024, 4) # 1 x 1
         )
@@ -56,7 +56,7 @@ class ContextEncoder(nn.Module):
            nn.ConvTranspose2d(64, input_channels, 4, stride=2, padding=1), # 64 x 64
            nn.Tanh()
         )
-    
+
     def forward(self, images):
         # Extract a 64 x 64 center from 128 x 128 image
         images_center = images[:, :, 32:32+64, 32:32+64].clone()
@@ -81,7 +81,7 @@ class RotationPrediction(nn.Module):
 
     def __init__(self):
         super().__init__()
-    
+
     def forward(self, images):
         pass
 
@@ -92,7 +92,7 @@ class RotationPrediction(nn.Module):
 
 class CPCModel(nn.Module):
     latent_dim = 1024
-    
+
     def __init__(self):
         super().__init__()
         self.target_dim = 64
@@ -183,7 +183,7 @@ class SimCLR(nn.Module):
 
     def __init__(self):
         super().__init__()
-    
+
     def forward(self, images):
         pass
 

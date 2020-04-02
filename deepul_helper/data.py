@@ -14,7 +14,19 @@ def get_transform(task, train=True):
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
     elif task == 'rotation':
-        pass
+        if train:
+            transform = transforms.Compose([
+                transforms.RandomResizedCrop(256),
+                transforms.ToTensor(),
+                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            ])
+        else:
+            transform = transforms.Compose([
+                transforms.Resize(300),
+                transforms.CenterCrop(256),
+                transforms.ToTensor(),
+                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            ])
     elif task == 'cpc':
         if train:
             transform = transforms.Compose([

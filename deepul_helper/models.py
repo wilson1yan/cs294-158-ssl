@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.models import AlexNet
 
 from deepul_helper.utils import images_to_cpc_patches
 from deepul_helper.resnet import ResNet18
@@ -81,16 +82,33 @@ class ContextEncoder(nn.Module):
 ########################################## Rotation Prediction #######################################################
 
 class RotationPrediction(nn.Module):
-    latent_dim = "FILL"
+    latent_dim = 256 * 6 * 6
 
     def __init__(self):
         super().__init__()
+        self.model = AlexNet(4)
 
     def forward(self, images):
-        pass
+        images, targets = self._preprocess(images)
+        targets = targets.to(images.get_device())
+        logits = self.model(images)
+        return F.cross_entropy(logits, targets)
 
     def encode(self, images):
-        pass
+        zs = self.model.features(images)
+        zs = self.model.avgpool(images)
+        return zs.view(zs.shape[0], -1)
+
+    def _preprocess(self, images):
+        batch_size = images.shape[0]
+        images_90 = torch.flip(images.transpose(2, 3), (2,))
+        images_180 = torch.flip(images, (2, 3))
+        images_270 = torch.flip(images, (2,)).transpose(2, 3)
+        images_batch = torch.cat((images, images_90, images_180, images_270), dim=0)
+        targets = torch.arange(4).long().repeat(batch_size)
+        targets = targets.view(batch_size, 4).transpose(0, 1)
+        targets = targets.contiguous().view(-1)
+        return images_batch, targets
 
 ########################################## Contrastive Predictive Coding #############################################
 

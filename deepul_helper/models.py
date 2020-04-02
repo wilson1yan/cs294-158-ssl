@@ -14,7 +14,7 @@ class DenoisingAutoencoder(nn.Module):
 
     def __init__(self):
         super().__init__()
-    
+
     def forward(self, images):
         pass
 
@@ -28,7 +28,7 @@ class RotationPrediction(nn.Module):
 
     def __init__(self):
         super().__init__()
-    
+
     def forward(self, images):
         pass
 
@@ -39,7 +39,7 @@ class RotationPrediction(nn.Module):
 
 class CPCModel(nn.Module):
     latent_dim = 1024
-    
+
     def __init__(self):
         super().__init__()
         self.target_dim = 64
@@ -110,6 +110,7 @@ class PixelCNN(nn.Module):
                 nn.ReLU(),
                 nn.ZeroPad2d((1, 1, 0, 0)),
                 nn.Conv2d(256, 256, (1, 3)),
+                nn.ReLU(),
                 nn.ZeroPad2d((0, 0, 1, 0)),
                 nn.Conv2d(256, 256, (2, 1)),
                 nn.ReLU(),
@@ -118,9 +119,11 @@ class PixelCNN(nn.Module):
             self.net.append(block)
 
     def forward(self, x):
-        for block in self.net:
+        for i, block in enumerate(self.net):
             x = block(x) + x
-        return F.relu(x)
+            if i < len(self.net) - 1:
+                x = F.relu(x)
+        return x
 
 
 ########################################## SimCLR ##################################################################
@@ -130,7 +133,7 @@ class SimCLR(nn.Module):
 
     def __init__(self):
         super().__init__()
-    
+
     def forward(self, images):
         pass
 

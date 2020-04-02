@@ -5,7 +5,7 @@ from torchvision import transforms
 
 
 def get_datasets(dataset):
-    if dataset == 'imagenet':
+    if 'imagenet' in dataset:
         train_dir = osp.join('data', dataset, 'train')
         val_dir = osp.join('data', dataset, 'val')
         train_dataset = datasets.ImageFolder(

@@ -7,11 +7,10 @@ import shutil
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
-from torchvision.datasets import ImageFolder
-from torchvision.transforms import transforms
 
-from deepul_helper.models import DenoisingAutoencoder, RotationPrediction, CPCModel, SimCLR
+from deepul_helper.models import ContextEncoder, RotationPrediction, CPCModel, SimCLR
 from deepul_helper.utils import AverageMeter, ProgressMeter
+from deepul_helper.data import get_datasets
 
 
 parser = argparse.ArgumentParser()
@@ -31,7 +30,7 @@ def main():
     assert args.task in ['denoising_autoencoder', 'rotation', 'cpc', 'simclr']
 
     args.dataset = osp.join('data', args.dataset)
-    args.output_dir = osp.join('results', args.task)
+    args.output_dir = osp.join('results', f"{args.dataset}_{args.task}")
     if not osp.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
@@ -46,8 +45,8 @@ def main_worker(gpu, ngpus, args):
     dist.init_process_group(backend='nccl', init_method='tcp://localhost:23456',
                             world_size=ngpus, rank=gpu)
 
-    if args.task == 'denoising_autoencoder':
-        model = DenoisingAutoencoder()
+    if args.task == 'context_encoder':
+        model = ContextEncoder()
     elif args.task == 'rotation':
         model = RotationPrediction()
     elif args.task == 'cpc':
@@ -65,34 +64,13 @@ def main_worker(gpu, ngpus, args):
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     optimizer = torch.optim.Adam(model.parameters(), args.lr)
 
-    train_dir = osp.join(args.dataset, 'train')
-    train_dataset = ImageFolder(
-        train_dir,
-        transforms.Compose([
-            transforms.RandomResizedCrop(256),
-            transforms.RandomHorizontalFlip(),
-            transforms.Grayscale(),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5,), (0.5,)),
-        ])
-    )
+    train_dataset, val_dataset, _ = get_datasets(args.dataset, args.task)
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, num_workers=4,
         pin_memory=True, sampler=train_sampler
     )
 
-    val_dir = osp.join(args.dataset, 'val')
-    val_dataset = ImageFolder(
-        val_dir,
-        transforms.Compose([
-            transforms.Resize(300),
-            transforms.CenterCrop(256),
-            transforms.Grayscale(),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5,), (0.5,)),
-        ])
-    )
     val_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=args.batch_size, num_workers=4,
         pin_memory=True

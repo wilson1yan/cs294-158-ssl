@@ -10,36 +10,45 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 from deepul_helper.data import get_datasets
-from deepul_helper.models import CPCModel
+from deepul_helper.models import ContextEncoder, RotationPrediction, CPCModel, SimCLR
 from deepul_helper.utils import AverageMeter, ProgressMeter, remove_module_state_dict
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--dataset', type=str, default='imagenet')
-    parser.add_argument('-m', '--model', type=str, required=True,
-                        help='denoising_autoencoder|rotation|cpc|simclr')
+    parser.add_argument('-t', '--task', type=str, required=True,
+                        help='context_encoder|rotation|cpc|simclr')
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('-e', '--epochs', type=int, default=50)
     parser.add_argument('-b', '--batch_size', type=int, default=128)
     parser.add_argument('-i', '--log_interval', type=int, default=10)
     args = parser.parse_args()
 
-    args.output_dir = osp.join('results', args.model, 'linear_classifier')
+    model_dir = osp.join('results', f'{args.dataset}_{args.task}')
+    args.output_dir = osp.join(model_dir, 'linear_classifier')
+    assert osp.exists(model_dir)
     if not osp.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
-    if args.model == 'cpc':
-        model = CPCModel().cuda()
-        model_path = osp.join('results', args.model, 'model_best.pth.tar')
-        checkpoint = torch.load(model_path, map_location='cuda')
-        state_dict = remove_module_state_dict(checkpoint['state_dict'])
-        model.load_state_dict(state_dict)
-        model.eval()
+    if args.task == 'context_encoder':
+        model = ContextEncoder()
+    elif args.task == 'rotation_prediction':
+        model = RotationPrediction()
+    elif args.task == 'cpc':
+        model = CPCModel()
+    elif args.task == 'simclr':
+        model = SimCLR()
     else:
-        raise Exception('Invalid model:', args.model)
+        raise Exception('Invalid task:', args.task)
+    model = model.cuda()
+    model_path = osp.join(model_dir, 'model_best.pth.tar')
+    checkpoint = torch.load(model_path, map_location='cuda')
+    state_dict = remove_module_state_dict(checkpoint['state_dict'])
+    model.load_state_dict(state_dict)
+    model.eval()
 
-    train_dset, test_dset, n_classes = get_datasets(args.dataset)
+    train_dset, test_dset, n_classes = get_datasets(args.dataset, args.task)
     train_loader = torch.utils.data.DataLoader(
         train_dset, batch_size=args.batch_size, num_workers=4,
         pin_memory=True
@@ -50,7 +59,7 @@ def main():
     )
 
     linear_classifier = nn.Linear(model.latent_dim, n_classes).cuda()
-    optimizer = optim.Adam(linear_classifier.parameters(), lr=args.lr)
+    optimizer = optim.SGD(linear_classifier.parameters(), lr=args.lr, momentum=0.8)
 
     best_acc = 0
     for epoch in range(args.epochs):

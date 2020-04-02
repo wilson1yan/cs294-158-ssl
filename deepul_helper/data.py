@@ -8,7 +8,7 @@ def get_transform(task, train=True):
     transform = None
     if task == 'context_encoder':
         transform = transforms.Compose([
-            transforms.Scale(128),
+            transforms.Resize(128),
             transforms.CenterCrop(128),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
@@ -25,7 +25,7 @@ def get_transform(task, train=True):
                 transforms.Normalize((0.5,), (0.5,)),
             ])
         else:
-            transforms = transforms.Compose([
+            transform = transforms.Compose([
                 transforms.Resize(300),
                 transforms.CenterCrop(256),
                 transforms.Grayscale(),

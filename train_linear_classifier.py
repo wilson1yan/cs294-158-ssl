@@ -19,7 +19,7 @@ def main():
     parser.add_argument('-d', '--dataset', type=str, default='imagenet')
     parser.add_argument('-t', '--task', type=str, required=True,
                         help='context_encoder|rotation|cpc|simclr')
-    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--lr', type=float, default=0.1)
     parser.add_argument('-e', '--epochs', type=int, default=50)
     parser.add_argument('-b', '--batch_size', type=int, default=128)
     parser.add_argument('-i', '--log_interval', type=int, default=10)
@@ -59,7 +59,7 @@ def main():
     )
 
     linear_classifier = nn.Sequential(nn.BatchNorm1d(model.latent_dim), nn.Linear(model.latent_dim, n_classes)).cuda()
-    optimizer = optim.SGD(linear_classifier.parameters(), lr=args.lr, momentum=0.8)
+    optimizer = optim.SGD(linear_classifier.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
 
     best_acc = 0
     for epoch in range(args.epochs):

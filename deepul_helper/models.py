@@ -96,7 +96,7 @@ class RotationPrediction(nn.Module):
 
     def encode(self, images):
         zs = self.model.features(images)
-        zs = self.model.avgpool(images)
+        zs = self.model.avgpool(zs)
         return zs.view(zs.shape[0], -1)
 
     def _preprocess(self, images):

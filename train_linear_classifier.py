@@ -33,7 +33,7 @@ def main():
 
     if args.task == 'context_encoder':
         model = ContextEncoder()
-    elif args.task == 'rotation_prediction':
+    elif args.task == 'rotation':
         model = RotationPrediction()
     elif args.task == 'cpc':
         model = CPCModel()
@@ -58,7 +58,7 @@ def main():
         pin_memory=True
     )
 
-    linear_classifier = nn.Linear(model.latent_dim, n_classes).cuda()
+    linear_classifier = nn.Sequential(nn.BatchNorm1d(model.latent_dim), nn.Linear(model.latent_dim, n_classes)).cuda()
     optimizer = optim.SGD(linear_classifier.parameters(), lr=args.lr, momentum=0.8)
 
     best_acc = 0

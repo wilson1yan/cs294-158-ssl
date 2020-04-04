@@ -12,6 +12,7 @@ from deepul_helper.resnet import ResNet18
 
 class ContextEncoder(nn.Module):
     latent_dim = 1024
+    metrics = ['Loss']
 
     def __init__(self):
         super().__init__()
@@ -70,7 +71,7 @@ class ContextEncoder(nn.Module):
         z = self.encoder(images_masked)
         center_recon = self.decoder(z)
 
-        return F.mse_loss(center_recon, images_center)
+        return dict(Loss=F.mse_loss(center_recon, images_center))
 
     def encode(self, images):
         images_masked = images
@@ -83,6 +84,7 @@ class ContextEncoder(nn.Module):
 
 class RotationPrediction(nn.Module):
     latent_dim = 256 * 6 * 6
+    metrics = ['Loss', 'Acc1']
 
     def __init__(self):
         super().__init__()
@@ -92,7 +94,13 @@ class RotationPrediction(nn.Module):
         images, targets = self._preprocess(images)
         targets = targets.to(images.get_device())
         logits = self.model(images)
-        return F.cross_entropy(logits, targets)
+        loss = F.cross_entropy(logits, targets)
+
+        pred = outputs.argmax(logits, dim=-1)
+        correct = pred.eq(target).float().sum()
+        acc = correct / targets.shape[0]
+
+        return dict(Loss=loss, Acc1=acc)
 
     def encode(self, images):
         zs = self.model.features(images)
@@ -114,6 +122,7 @@ class RotationPrediction(nn.Module):
 
 class CPCModel(nn.Module):
     latent_dim = 1024
+    metrics = ['Loss']
 
     def __init__(self):
         super().__init__()
@@ -160,7 +169,7 @@ class CPCModel(nn.Module):
 
             loss = loss + F.cross_entropy(logits, labels)
 
-        return loss
+        return dict(Loss=loss)
 
     def encode(self, images):
         batch_size = images.shape[0]
@@ -205,6 +214,7 @@ class PixelCNN(nn.Module):
 
 class SimCLR(nn.Module):
     latent_dim = "FILL"
+    metrics = ['Loss']
 
     def __init__(self):
         super().__init__()

@@ -97,10 +97,10 @@ def main_worker(gpu, ngpus, args):
 def train(train_loader, model, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
-    losses = AverageMeter('Loss', ':.4e')
+    avg_meters = {k: AverageMeter(k, ':.4e') for k in model.metrics}
     progress = ProgressMeter(
         len(train_loader),
-        [batch_time, data_time, losses],
+        [batch_time, data_time] + list(avg_meters.values()),
         prefix="Epoch: [{}]".format(epoch)
     )
 
@@ -114,12 +114,13 @@ def train(train_loader, model, optimizer, epoch, args):
 
         # compute loss
         images = images.cuda(args.gpu, non_blocking=True)
-        loss = model(images)
-        losses.update(loss.item(), images.shape[0])
+        out = model(images)
+        for k, v in out.items():
+            avg_meters[k].update(v.item(), images.shape[0])
 
         # compute gradient and optimizer step
         optimizer.zero_grad()
-        loss.backward()
+        out['Loss'].backward()
         optimizer.step()
 
         # measure elapsed time
@@ -133,10 +134,10 @@ def train(train_loader, model, optimizer, epoch, args):
 def validate(val_loader, model, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
-    losses = AverageMeter('Loss', ':.4e')
+    avg_meters = {k: AverageMeter(k, ':.4e') for k in model.metrics}
     progress = ProgressMeter(
         len(val_loader),
-        [batch_time, data_time, losses],
+        [batch_time, data_time] + list(avg_meters.values()),
         prefix="Test: "
     )
 
@@ -148,8 +149,9 @@ def validate(val_loader, model, args):
         for i, (images, _) in enumerate(val_loader):
             # compute and measure loss
             images = images.cuda(args.gpu, non_blocking=True)
-            loss = model(images)
-            losses.update(loss.item(), images.shape[0])
+            out = model(images)
+            for k, v in out.items():
+                avg_meters[k].update(v.item(), images.shape[0])
 
             # measure elapsed time
             batch_time.update(time.time() - end)
@@ -157,8 +159,13 @@ def validate(val_loader, model, args):
 
             if i % args.log_interval == 0:
                 progress.display(i)
+    
+    print_str = ' *'
+    for k, v in avg_meters.items():
+        print_str += f' {k} {v.avg:.3f}'
+    print(print_str)
 
-    return losses.avg
+    return avg_meters['Loss'].avg
 
 
 def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar'):

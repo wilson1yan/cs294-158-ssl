@@ -102,6 +102,8 @@ def main_worker(gpu, ngpus, args):
                 'state_dict': model.state_dict(),
                 'best_loss': best_loss,
                 'optimizer': optimizer.state_dict(),
+                'state_dict_linear': linear_classifier.state_dict(),
+                'optimizer_linear': optimizer_linear.state_dict()
             }, is_best, args)
 
 

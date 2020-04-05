@@ -13,6 +13,7 @@ from deepul_helper.resnet import ResNet18
 class ContextEncoder(nn.Module):
     latent_dim = 1024
     metrics = ['Loss']
+    metrics_fmt = [':.4e']
 
     def __init__(self):
         super().__init__()
@@ -71,7 +72,7 @@ class ContextEncoder(nn.Module):
         z = self.encoder(images_masked)
         center_recon = self.decoder(z)
 
-        return dict(Loss=F.mse_loss(center_recon, images_center))
+        return dict(Loss=F.mse_loss(center_recon, images_center)), torch.flatten(z, 1)
 
     def encode(self, images):
         images_masked = images
@@ -85,22 +86,27 @@ class ContextEncoder(nn.Module):
 class RotationPrediction(nn.Module):
     latent_dim = 256 * 6 * 6
     metrics = ['Loss', 'Acc1']
+    metrics_fmt = [':.4e', ':6.2f']
 
     def __init__(self):
         super().__init__()
         self.model = AlexNet(4)
 
     def forward(self, images):
+        batch_size = images.shape[0]
         images, targets = self._preprocess(images)
         targets = targets.to(images.get_device())
-        logits = self.model(images)
+
+        zs = self.model.avgpool(self.model.features(images))
+        zs = torch.flatten(zs, 1)
+        logits = self.model.classifier(zs)
         loss = F.cross_entropy(logits, targets)
 
-        pred = outputs.argmax(logits, dim=-1)
-        correct = pred.eq(target).float().sum()
-        acc = correct / targets.shape[0]
+        pred = logits.argmax(dim=-1)
+        correct = pred.eq(targets).float().sum()
+        acc = correct / targets.shape[0] * 100.
 
-        return dict(Loss=loss, Acc1=acc)
+        return dict(Loss=loss, Acc1=acc), zs[:batch_size]
 
     def encode(self, images):
         zs = self.model.features(images)
@@ -123,6 +129,7 @@ class RotationPrediction(nn.Module):
 class CPCModel(nn.Module):
     latent_dim = 1024
     metrics = ['Loss']
+    metrics_fmt = [':.4e']
 
     def __init__(self):
         super().__init__()
@@ -144,8 +151,8 @@ class CPCModel(nn.Module):
 
         latents = self.encoder(patches).mean(dim=[2, 3]) # (N*49, 1024)
 
-        latents = latents.view(batch_size, 7, 7, -1).permute(0, 3, 1, 2).contiguous()
-        context = self.pixelcnn(latents) # (N, 1024, 7, 7)
+        latents = latents.view(batch_size, 7, 7, -1)
+        context = self.pixelcnn(latents.permute(0, 3, 1, 2).contiguous()) # (N, 1024, 7, 7)
 
         col_dim, row_dim = 7, 7
         targets = self.z2target(latents).view(-1, self.target_dim) # (N*49, 64)
@@ -169,7 +176,7 @@ class CPCModel(nn.Module):
 
             loss = loss + F.cross_entropy(logits, labels)
 
-        return dict(Loss=loss)
+        return dict(Loss=loss), latents.mean(dim=[1, 2])
 
     def encode(self, images):
         batch_size = images.shape[0]
@@ -215,6 +222,7 @@ class PixelCNN(nn.Module):
 class SimCLR(nn.Module):
     latent_dim = "FILL"
     metrics = ['Loss']
+    metrics_fmt = [':.4e']
 
     def __init__(self):
         super().__init__()

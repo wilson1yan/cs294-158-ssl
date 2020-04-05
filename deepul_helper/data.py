@@ -67,5 +67,13 @@ def get_datasets(dataset, task):
         )
 
         return train_dataset, val_dataset, len(train_dataset.classes)
+    elif dataset == 'cifar10':
+        train_dset = datasets.CIFAR10(osp.join('data', dataset), train=True,
+                                      transform=get_transform(task, train=True),
+                                      download=True)
+        test_dset = datasets.CIFAR10(osp.join('data', dataset), train=False,
+                                     transform=get_transform(task, train=False),
+                                     download=True)
+        return train_dset, test_dset, len(train_dset.classes)
     else:
         raise Exception('Invalid dataset:', dataset)

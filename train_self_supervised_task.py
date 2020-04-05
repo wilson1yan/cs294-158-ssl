@@ -5,6 +5,8 @@ import time
 import shutil
 
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
@@ -24,6 +26,7 @@ parser.add_argument('-i', '--log_interval', type=int, default=10)
 
 
 best_loss = float('inf')
+best_acc = 0.0
 
 def main():
     args = parser.parse_args()
@@ -55,16 +58,16 @@ def main_worker(gpu, ngpus, args):
         model = SimCLR()
     else:
         raise Exception('Invalid task:', args.task)
+    args.metrics = model.metrics
+    args.metrics_fmt = model.metrics_fmt
 
     torch.backends.cudnn.benchmark = True
     torch.cuda.set_device(gpu)
     model.cuda(gpu)
 
     args.gpu = gpu
-    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
-    optimizer = torch.optim.Adam(model.parameters(), args.lr)
 
-    train_dataset, val_dataset, _ = get_datasets(args.dataset, args.task)
+    train_dataset, val_dataset, n_classes = get_datasets(args.dataset, args.task)
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, num_workers=4,
@@ -76,12 +79,20 @@ def main_worker(gpu, ngpus, args):
         pin_memory=True
     )
 
+    linear_classifier = nn.Sequential(nn.BatchNorm1d(model.latent_dim),
+                                      nn.Linear(model.latent_dim, n_classes)).cuda()
+    linear_classifier = torch.nn.parallel.DistributedDataParallel(linear_classifier, device_ids=[gpu])
+    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
+    optimizer = torch.optim.Adam(model.parameters(), args.lr)
+    optimizer_linear = torch.optim.Adam(linear_classifier.parameters(), args.lr)
+
     for epoch in range(args.epochs):
         train_sampler.set_epoch(epoch)
 
-        train(train_loader, model, optimizer, epoch, args)
+        train(train_loader, model, linear_classifier,
+              optimizer, optimizer_linear, epoch, args)
 
-        val_loss = validate(val_loader, model, args)
+        val_loss = validate(val_loader, model, linear_classifier, args)
 
         is_best = val_loss < best_loss
         best_loss = min(val_loss, best_loss)
@@ -94,34 +105,52 @@ def main_worker(gpu, ngpus, args):
             }, is_best, args)
 
 
-def train(train_loader, model, optimizer, epoch, args):
+def train(train_loader, model, linear_classifier, optimizer,
+          optimizer_linear, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
-    avg_meters = {k: AverageMeter(k, ':.4e') for k in model.metrics}
+    top1 = AverageMeter('LinearAcc@1', ':6.2f')
+    top5 = AverageMeter('LinearAcc@5', ':6.2f')
+    avg_meters = {k: AverageMeter(k, fmt)
+                  for k, fmt in zip(args.metrics, args.metrics_fmt)}
     progress = ProgressMeter(
         len(train_loader),
-        [batch_time, data_time] + list(avg_meters.values()),
+        [batch_time, data_time, top1, top5] + list(avg_meters.values()),
         prefix="Epoch: [{}]".format(epoch)
     )
 
     # switch to train mode
     model.train()
+    linear_classifier.train()
 
     end = time.time()
-    for i, (images, _) in enumerate(train_loader):
+    for i, (images, target) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
         # compute loss
         images = images.cuda(args.gpu, non_blocking=True)
-        out = model(images)
+        target = target.cuda(args.gpu, non_blocking=True)
+        out, zs = model(images)
         for k, v in out.items():
             avg_meters[k].update(v.item(), images.shape[0])
 
-        # compute gradient and optimizer step
+        # compute gradient and optimizer step for ssl task
         optimizer.zero_grad()
         out['Loss'].backward()
         optimizer.step()
+
+        # compute gradient and optimizer step for classifier
+        logits = linear_classifier(zs.detach())
+        loss = F.cross_entropy(logits, target)
+
+        acc1, acc5 = accuracy(logits, target, topk=(1, 5))
+        top1.update(acc1[0], images.shape[0])
+        top5.update(acc5[0], images.shape[0])
+
+        optimizer_linear.zero_grad()
+        loss.backward()
+        optimizer_linear.step()
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -131,13 +160,16 @@ def train(train_loader, model, optimizer, epoch, args):
             progress.display(i)
 
 
-def validate(val_loader, model, args):
+def validate(val_loader, model, linear_classifier, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
-    avg_meters = {k: AverageMeter(k, ':.4e') for k in model.metrics}
+    top1 = AverageMeter('LinearAcc@1', ':6.2f')
+    top5 = AverageMeter('LinearAcc@5', ':6.2f')
+    avg_meters = {k: AverageMeter(k, fmt)
+                  for k, fmt in zip(args.metrics, args.metrics_fmt)}
     progress = ProgressMeter(
         len(val_loader),
-        [batch_time, data_time] + list(avg_meters.values()),
+        [batch_time, data_time, top1, top5] + list(avg_meters.values()),
         prefix="Test: "
     )
 
@@ -146,12 +178,18 @@ def validate(val_loader, model, args):
 
     with torch.no_grad():
         end = time.time()
-        for i, (images, _) in enumerate(val_loader):
+        for i, (images, target) in enumerate(val_loader):
             # compute and measure loss
             images = images.cuda(args.gpu, non_blocking=True)
-            out = model(images)
+            target = target.cuda(args.gpu, non_blocking=True)
+            out, zs = model(images)
             for k, v in out.items():
                 avg_meters[k].update(v.item(), images.shape[0])
+
+            logits = linear_classifier(zs)
+            acc1, acc5 = accuracy(logits, target, topk=(1, 5))
+            top1.update(acc1[0], images.shape[0])
+            top5.update(acc5[0], images.shape[0])
 
             # measure elapsed time
             batch_time.update(time.time() - end)
@@ -159,8 +197,8 @@ def validate(val_loader, model, args):
 
             if i % args.log_interval == 0:
                 progress.display(i)
-    
-    print_str = ' *'
+
+    print_str = f' * LinearAcc@1 {top1.avg:.3f} LinearAcc@5 {top5.avg:.3f}'
     for k, v in avg_meters.items():
         print_str += f' {k} {v.avg:.3f}'
     print(print_str)
@@ -173,6 +211,22 @@ def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar'):
     torch.save(state, filename)
     if is_best:
         shutil.copyfile(filename, osp.join(args.output_dir, 'model_best.pth.tar'))
+
+
+def accuracy(output, target, topk=(1,)):
+    with torch.no_grad():
+        maxk = max(topk)
+        batch_size = target.size(0)
+
+        _, pred = output.topk(maxk, 1, True, True)
+        pred = pred.t()
+        correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+        res = []
+        for k in topk:
+            correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+            res.append(correct_k.mul_(100.0 / batch_size))
+        return res
 
 
 if __name__ == '__main__':

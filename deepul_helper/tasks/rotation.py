@@ -6,7 +6,6 @@ import torch.nn.functional as F
 
 
 class RotationPrediction(nn.Module):
-    latent_dim = 256 * 6 * 6
     metrics = ['Loss', 'Acc1']
     metrics_fmt = [':.4e', ':6.2f']
 
@@ -14,6 +13,7 @@ class RotationPrediction(nn.Module):
         super().__init__()
         if dataset == 'cifar10':
             self.model = NetworkInNetwork()
+            self.latent_dim = 192 * 8 * 8
         elif 'imagenet' in dataset:
             pass
         else:
@@ -27,7 +27,6 @@ class RotationPrediction(nn.Module):
 
         if self.dataset == 'cifar10':
             logits, zs = self.model(images, out_feat_keys=('classifier', 'conv2'))
-            print(zs.shape)
         elif 'imagenet' in self.dataset:
             pass
 

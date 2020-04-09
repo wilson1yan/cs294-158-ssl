@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributed as dist
 import torch.multiprocessing as mp
+import torch.optim.lr_scheduler as lr_scheduler
 
 from deepul_helper.models import ContextEncoder, RotationPrediction, CPCModel, SimCLR
 from deepul_helper.utils import AverageMeter, ProgressMeter
@@ -19,9 +20,15 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-d', '--dataset', type=str, default='imagenet100')
 parser.add_argument('-t', '--task', type=str, required=True,
                     help='self-supervised learning task (context_encoder|rotation|cpc|simclr)')
-parser.add_argument('-b', '--batch_size', type=int, default=32, help='batch size total for all gpus')
-parser.add_argument('--lr', type=float, default=2e-4)
-parser.add_argument('-e', '--epochs', type=int, default=100)
+
+# Training parameters
+parser.add_argument('-b', '--batch_size', type=int, default=128, help='batch size total for all gpus')
+parser.add_argument('-e', '--epochs', type=int, default=200)
+parser.add_argument('-o', '--optimizer', type=str, default='sgd', help='sgd|adam')
+parser.add_argument('--lr', type=float, default=0.1)
+parser.add_argument('-m', '--momentum', type=float, default=0.9)
+parser.add_argument('-w', '--weight_decay', type=int, default=5e-4)
+
 parser.add_argument('-i', '--log_interval', type=int, default=10)
 
 
@@ -83,8 +90,22 @@ def main_worker(gpu, ngpus, args):
                                       nn.Linear(model.latent_dim, n_classes)).cuda()
     linear_classifier = torch.nn.parallel.DistributedDataParallel(linear_classifier, device_ids=[gpu])
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
-    optimizer = torch.optim.Adam(model.parameters(), args.lr)
-    optimizer_linear = torch.optim.Adam(linear_classifier.parameters(), args.lr)
+
+    if args.optimizer == 'sgd':
+        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum,
+                                    weight_decay=args.weight_decay, nesterov=True)
+        optimizer_linear = torch.optim.SGD(linear_classifier.parameters(), lr=args.lr,
+                                           momentum=args.momentum, nesterov=True)
+    elif args.optimizer == 'adam':
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, 
+                                     weight_decay=args.weight_decay)
+        optimizer_linear = torch.optim.Adam(linear_classifier.parameters(), args.lr)
+    else:
+        raise Exception('Unsupported optimizer', args.optimizer)
+
+    # Minimize SSL task loss, maximize linear classification accuracy
+    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=5)
+    scheduler_linear = lr_scheduler.ReduceLROnPlateau(optimizer_linear, 'max', patience=5)
 
     for epoch in range(args.epochs):
         train_sampler.set_epoch(epoch)
@@ -94,17 +115,22 @@ def main_worker(gpu, ngpus, args):
 
         val_loss, val_acc = validate(val_loader, model, linear_classifier, args)
 
+        scheduler.step(val_loss)
+        scheduler_linear.step(val_acc)
+
         is_best = val_loss < best_loss
         best_loss = min(val_loss, best_loss)
         if gpu == 0:
             save_checkpoint({
                 'epoch': epoch + 1,
                 'state_dict': model.state_dict(),
-                'best_loss': best_loss,
-                'best_acc': val_acc,
                 'optimizer': optimizer.state_dict(),
+                'scheduler': scheduler.state_dict(),
                 'state_dict_linear': linear_classifier.state_dict(),
-                'optimizer_linear': optimizer_linear.state_dict()
+                'optimizer_linear': optimizer_linear.state_dict(),
+                'schedular_linear': scheduler_linear.state_dict(),
+                'best_loss': best_loss,
+                'best_acc': val_acc
             }, is_best, args)
 
 

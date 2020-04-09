@@ -92,7 +92,7 @@ def main_worker(gpu, ngpus, args):
         train(train_loader, model, linear_classifier,
               optimizer, optimizer_linear, epoch, args)
 
-        val_loss = validate(val_loader, model, linear_classifier, args)
+        val_loss, val_acc = validate(val_loader, model, linear_classifier, args)
 
         is_best = val_loss < best_loss
         best_loss = min(val_loss, best_loss)
@@ -101,6 +101,7 @@ def main_worker(gpu, ngpus, args):
                 'epoch': epoch + 1,
                 'state_dict': model.state_dict(),
                 'best_loss': best_loss,
+                'best_acc': val_acc,
                 'optimizer': optimizer.state_dict(),
                 'state_dict_linear': linear_classifier.state_dict(),
                 'optimizer_linear': optimizer_linear.state_dict()
@@ -205,7 +206,7 @@ def validate(val_loader, model, linear_classifier, args):
         print_str += f' {k} {v.avg:.3f}'
     print(print_str)
 
-    return avg_meters['Loss'].avg
+    return avg_meters['Loss'].avg, top1.avg
 
 
 def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar'):

@@ -27,6 +27,7 @@ class RotationPrediction(nn.Module):
 
 		if self.dataset == 'cifar10':
 			logits, zs = self.model(images, out_feat_keys=('classifier', 'conv2'))
+                        print(zs.shape)
 		elif 'imagenet' in self.dataset:
 			pass
 
@@ -61,7 +62,7 @@ class RotationPrediction(nn.Module):
 class BasicBlock(nn.Module):
 	def __init__(self, in_planes, out_planes, kernel_size):
 		super(BasicBlock, self).__init__()
-		padding = (kernel_size-1)/2
+		padding = (kernel_size-1) // 2
 		self.layers = nn.Sequential()
 		self.layers.add_module('Conv', nn.Conv2d(in_planes, out_planes,
 			kernel_size=kernel_size, stride=1, padding=padding, bias=False))
@@ -70,8 +71,6 @@ class BasicBlock(nn.Module):
 
 	def forward(self, x):
 		return self.layers(x)
-
-		feat = F.avg_pool2d(feat, feat.size(3)).view(-1, self.nChannels)
 
 
 class GlobalAveragePooling(nn.Module):
@@ -84,7 +83,7 @@ class GlobalAveragePooling(nn.Module):
 
 
 class NetworkInNetwork(nn.Module):
-	def __init__(self, opt):
+	def __init__(self):
 		super(NetworkInNetwork, self).__init__()
 
 		num_classes = 4

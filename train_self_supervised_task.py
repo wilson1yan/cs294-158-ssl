@@ -17,19 +17,19 @@ from deepul_helper.data import get_datasets
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-d', '--dataset', type=str, default='imagenet100')
-parser.add_argument('-t', '--task', type=str, required=True,
-                    help='self-supervised learning task (context_encoder|rotation|cpc|simclr)')
+parser.add_argument('-d', '--dataset', type=str, default='cifar10', help='cifar10|imagenet* (default: cifar10)')
+parser.add_argument('-t', '--task', type=str, default='rotation',
+                    help='context_encoder|rotation|cpc|simclr (default: rotation)')
 
 # Training parameters
-parser.add_argument('-b', '--batch_size', type=int, default=128, help='batch size total for all gpus')
-parser.add_argument('-e', '--epochs', type=int, default=200)
-parser.add_argument('-o', '--optimizer', type=str, default='sgd', help='sgd|adam')
-parser.add_argument('--lr', type=float, default=0.1)
-parser.add_argument('-m', '--momentum', type=float, default=0.9)
-parser.add_argument('-w', '--weight_decay', type=int, default=5e-4)
+parser.add_argument('-b', '--batch_size', type=int, default=128, help='batch size total for all gpus (default: 128)')
+parser.add_argument('-e', '--epochs', type=int, default=200, help='default: 200')
+parser.add_argument('-o', '--optimizer', type=str, default='sgd', help='sgd|adam (default: sgd)')
+parser.add_argument('--lr', type=float, default=0.1, help='default: 0.1')
+parser.add_argument('-m', '--momentum', type=float, default=0.9, help='default: 0.9')
+parser.add_argument('-w', '--weight_decay', type=int, default=5e-4, help='default: 5e-4')
 
-parser.add_argument('-i', '--log_interval', type=int, default=10)
+parser.add_argument('-i', '--log_interval', type=int, default=10, help='default: 10')
 
 
 best_loss = float('inf')
@@ -56,13 +56,13 @@ def main_worker(gpu, ngpus, args):
     args.batch_size = args.batch_size // ngpus
 
     if args.task == 'context_encoder':
-        model = ContextEncoder()
+        model = ContextEncoder(args.dataset)
     elif args.task == 'rotation':
-        model = RotationPrediction()
+        model = RotationPrediction(args.dataset)
     elif args.task == 'cpc':
-        model = CPCModel()
+        model = CPCModel(args.dataset)
     elif args.task == 'simclr':
-        model = SimCLR()
+        model = SimCLR(args.dataset)
     else:
         raise Exception('Invalid task:', args.task)
     args.metrics = model.metrics

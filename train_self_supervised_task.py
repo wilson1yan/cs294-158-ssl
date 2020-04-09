@@ -11,7 +11,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.optim.lr_scheduler as lr_scheduler
 
-from deepul_helper.models import ContextEncoder, RotationPrediction, CPCModel, SimCLR
+from deepul_helper.tasks import *
 from deepul_helper.utils import AverageMeter, ProgressMeter
 from deepul_helper.data import get_datasets
 
@@ -97,7 +97,7 @@ def main_worker(gpu, ngpus, args):
         optimizer_linear = torch.optim.SGD(linear_classifier.parameters(), lr=args.lr,
                                            momentum=args.momentum, nesterov=True)
     elif args.optimizer == 'adam':
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, 
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
                                      weight_decay=args.weight_decay)
         optimizer_linear = torch.optim.Adam(linear_classifier.parameters(), args.lr)
     else:

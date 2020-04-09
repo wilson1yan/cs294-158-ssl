@@ -93,7 +93,6 @@ class NetworkInNetwork(nn.Module):
         use_avg_on_conv3 = False
 
 
-        assert(num_stages >= 3)
         nChannels  = 192
         nChannels2 = 160
         nChannels3 = 96

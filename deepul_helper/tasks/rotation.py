@@ -25,13 +25,13 @@ class RotationPrediction(nn.Module):
         self.n_classes = n_classes
 
     def construct_classifier(self):
-        if dataset == 'cifar10':
+        if self.dataset == 'cifar10':
             classifier = nn.Sequential(
                 Flatten(),
                 nn.BatchNorm1d(self.latent_dim, affine=False),
-                nn.Linear(self.latent_dim, self.n_classes)    
+                nn.Linear(self.latent_dim, self.n_classes)
             )
-        elif 'imagenet' in dataset:
+        elif 'imagenet' in self.dataset:
             classifier = nn.Sequential(
                 nn.AdaptiveMaxPool2d((6, 6)),
                 nn.BatchNorm2d(256, affine=False),
@@ -48,7 +48,6 @@ class RotationPrediction(nn.Module):
         targets = targets.to(images.get_device())
 
         logits, zs = self.model(images, out_feat_keys=('classifier', self.feat_layer))
-        zs = torch.flatten(zs, 1)
         loss = F.cross_entropy(logits, targets)
 
         pred = logits.argmax(dim=-1)

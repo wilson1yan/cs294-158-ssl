@@ -86,7 +86,7 @@ def main_worker(gpu, ngpus, args):
 
     args.gpu = gpu
 
-    linear_classifier = model.construct_classifier()
+    linear_classifier = model.construct_classifier().cuda(gpu)
     linear_classifier = torch.nn.parallel.DistributedDataParallel(linear_classifier, device_ids=[gpu])
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
 

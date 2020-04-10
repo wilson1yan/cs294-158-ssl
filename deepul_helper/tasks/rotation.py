@@ -9,7 +9,7 @@ class RotationPrediction(nn.Module):
     metrics = ['Loss', 'Acc1']
     metrics_fmt = [':.4e', ':6.2f']
 
-    def __init__(self, dataset):
+    def __init__(self, dataset, n_classes):
         super().__init__()
         if dataset == 'cifar10':
             self.model = NetworkInNetwork()
@@ -22,6 +22,25 @@ class RotationPrediction(nn.Module):
         else:
             raise Exception('Unsupported dataset:', dataset)
         self.dataset = dataset
+        self.n_classes = n_classes
+
+    def construct_classifier(self):
+        if dataset == 'cifar10':
+            classifier = nn.Sequential(
+                Flatten(),
+                nn.BatchNorm1d(self.latent_dim, affine=False),
+                nn.Linear(self.latent_dim, self.n_classes)    
+            )
+        elif 'imagenet' in dataset:
+            classifier = nn.Sequential(
+                nn.AdaptiveMaxPool2d((6, 6)),
+                nn.BatchNorm2d(256, affine=False),
+                Flatten(),
+                nn.Linear(256 * 6 * 6, self.n_classes)
+            )
+        else:
+            raise Exception('Unsupported dataset:', dataset)
+        return classifier
 
     def forward(self, images):
         batch_size = images.shape[0]
@@ -53,6 +72,7 @@ class RotationPrediction(nn.Module):
         targets = targets.view(batch_size, 4).transpose(0, 1)
         targets = targets.contiguous().view(-1)
         return images_batch, targets
+
 
 
 # Code borrowed from https://github.com/gidariss/FeatureLearningRotNet

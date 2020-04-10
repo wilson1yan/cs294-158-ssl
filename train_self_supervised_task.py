@@ -55,25 +55,6 @@ def main_worker(gpu, ngpus, args):
                             world_size=ngpus, rank=gpu)
     args.batch_size = args.batch_size // ngpus
 
-    if args.task == 'context_encoder':
-        model = ContextEncoder(args.dataset)
-    elif args.task == 'rotation':
-        model = RotationPrediction(args.dataset)
-    elif args.task == 'cpc':
-        model = CPCModel(args.dataset)
-    elif args.task == 'simclr':
-        model = SimCLR(args.dataset)
-    else:
-        raise Exception('Invalid task:', args.task)
-    args.metrics = model.metrics
-    args.metrics_fmt = model.metrics_fmt
-
-    torch.backends.cudnn.benchmark = True
-    torch.cuda.set_device(gpu)
-    model.cuda(gpu)
-
-    args.gpu = gpu
-
     train_dataset, val_dataset, n_classes = get_datasets(args.dataset, args.task)
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     train_loader = torch.utils.data.DataLoader(
@@ -86,8 +67,26 @@ def main_worker(gpu, ngpus, args):
         pin_memory=True
     )
 
-    linear_classifier = nn.Sequential(nn.BatchNorm1d(model.latent_dim),
-                                      nn.Linear(model.latent_dim, n_classes)).cuda()
+    if args.task == 'context_encoder':
+        model = ContextEncoder(args.dataset, n_classes)
+    elif args.task == 'rotation':
+        model = RotationPrediction(args.dataset, n_classes)
+    elif args.task == 'cpc':
+        model = CPC(args.dataset, n_classes)
+    elif args.task == 'simclr':
+        model = SimCLR(args.dataset, n_classes)
+    else:
+        raise Exception('Invalid task:', args.task)
+    args.metrics = model.metrics
+    args.metrics_fmt = model.metrics_fmt
+
+    torch.backends.cudnn.benchmark = True
+    torch.cuda.set_device(gpu)
+    model.cuda(gpu)
+
+    args.gpu = gpu
+
+    linear_classifier = model.construct_classifier()
     linear_classifier = torch.nn.parallel.DistributedDataParallel(linear_classifier, device_ids=[gpu])
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
 

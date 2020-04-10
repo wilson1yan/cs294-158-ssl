@@ -7,12 +7,19 @@ from torchvision import transforms
 def get_transform(dataset, task, train=True):
     transform = None
     if task == 'context_encoder':
-        transform = transforms.Compose([
-            transforms.Resize(128),
-            transforms.CenterCrop(128),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-        ])
+        if dataset == 'cifar10':
+            transform = transforms.Compose([
+                transforms.Resize(128),
+                transforms.ToTensor(),
+                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))
+            ])
+        elif 'imagenet' in dataset:
+            transform = transforms.Compose([
+                transforms.Resize(350),
+                transforms.RandomCrop(128),
+                transforms.ToTensor(),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+            ])
     elif task == 'rotation':
         if dataset == 'cifar10':
             if train:

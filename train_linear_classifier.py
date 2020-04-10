@@ -10,8 +10,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 from deepul_helper.data import get_datasets
-from deepul_helper.models import ContextEncoder, RotationPrediction, CPCModel, SimCLR
 from deepul_helper.utils import AverageMeter, ProgressMeter, remove_module_state_dict
+from deepul_helper.tasks import *
 
 
 def main():
@@ -31,23 +31,6 @@ def main():
     if not osp.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
-    if args.task == 'context_encoder':
-        model = ContextEncoder()
-    elif args.task == 'rotation':
-        model = RotationPrediction()
-    elif args.task == 'cpc':
-        model = CPCModel()
-    elif args.task == 'simclr':
-        model = SimCLR()
-    else:
-        raise Exception('Invalid task:', args.task)
-    model = model.cuda()
-    model_path = osp.join(model_dir, 'model_best.pth.tar')
-    checkpoint = torch.load(model_path, map_location='cuda')
-    state_dict = remove_module_state_dict(checkpoint['state_dict'])
-    model.load_state_dict(state_dict)
-    model.eval()
-
     train_dset, test_dset, n_classes = get_datasets(args.dataset, args.task)
     train_loader = torch.utils.data.DataLoader(
         train_dset, batch_size=args.batch_size, num_workers=4,
@@ -58,7 +41,24 @@ def main():
         pin_memory=True
     )
 
-    linear_classifier = nn.Sequential(nn.BatchNorm1d(model.latent_dim), nn.Linear(model.latent_dim, n_classes)).cuda()
+    if args.task == 'context_encoder':
+        model = ContextEncoder(args.dataset, n_classes)
+    elif args.task == 'rotation':
+        model = RotationPrediction(args.dataset, n_classes)
+    elif args.task == 'cpc':
+        model = CPC(args.dataset, n_classes)
+    elif args.task == 'simclr':
+        model = SimCLR(args.dataset, n_classes)
+    else:
+        raise Exception('Invalid task:', args.task)
+    model = model.cuda()
+    model_path = osp.join(model_dir, 'model_best.pth.tar')
+    checkpoint = torch.load(model_path, map_location='cuda')
+    state_dict = remove_module_state_dict(checkpoint['state_dict'])
+    model.load_state_dict(state_dict)
+    model.eval()
+
+    linear_classifier = model.construct_classifier().cuda()
     optimizer = optim.SGD(linear_classifier.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
 
     best_acc = 0

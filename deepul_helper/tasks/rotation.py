@@ -57,9 +57,8 @@ class RotationPrediction(nn.Module):
         return dict(Loss=loss, Acc1=acc), zs[:batch_size]
 
     def encode(self, images):
-        zs = self.model.features(images)
-        zs = self.model.avgpool(zs)
-        return zs.view(zs.shape[0], -1)
+        zs = self.model(images, out_feat_keys=(self.feat_layer,))
+        return zs
 
     def _preprocess(self, images):
         batch_size = images.shape[0]

@@ -4,13 +4,14 @@ import torch.nn.functional as F
 
 
 class ContextEncoder(nn.Module):
-    latent_dim = 1024
     metrics = ['Loss']
     metrics_fmt = [':.4e']
 
-    def __init__(self):
+    def __init__(self, dataset, n_classes):
         super().__init__()
         input_channels = 3
+
+        self.latent_dim = 4000
 
         # Encodes the masked image
         self.encoder = nn.Sequential(
@@ -30,14 +31,14 @@ class ContextEncoder(nn.Module):
             nn.Conv2d(256, 512, 4, stride=2, padding=1), # 4 x 4
             nn.BatchNorm2d(512),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(512, 1024, 4) # 1 x 1
+            nn.Conv2d(512, self.latent_dim, 4) # 1 x 1
         )
 
         # Only reconstructs the masked part of the image and not the whole image
         self.decoder = nn.Sequential(
-           nn.BatchNorm2d(1024),
+           nn.BatchNorm2d(self.latent_dim),
            nn.ReLU(inplace=True),
-           nn.ConvTranspose2d(1024, 512, 4, stride=1, padding=0), # 4 x 4
+           nn.ConvTranspose2d(self.latent_dim, 512, 4, stride=1, padding=0), # 4 x 4
            nn.BatchNorm2d(512),
            nn.ReLU(inplace=True),
            nn.ConvTranspose2d(512, 256, 4, stride=2, padding=1), # 8 x 8
@@ -52,6 +53,17 @@ class ContextEncoder(nn.Module):
            nn.ConvTranspose2d(64, input_channels, 4, stride=2, padding=1), # 64 x 64
            nn.Tanh()
         )
+
+        self.dataset = dataset
+        self.n_classes = n_classes
+
+    def construct_classifier(self):
+        classifier = nn.Sequential(
+            Flatten(),
+            nn.BatchNorm1d(self.latent_dim, affine=False),
+            nn.Linear(self.latent_dim, self.n_classes)
+        )
+        return classifier
 
     def forward(self, images):
         # Extract a 64 x 64 center from 128 x 128 image
@@ -72,4 +84,12 @@ class ContextEncoder(nn.Module):
         images_masked[:, 0, 32+4:32+64-4, 32+4:32+64-4] = 2 * 117.0/255.0 - 1.0
         images_masked[:, 1, 32+4:32+64-4, 32+4:32+64-4] = 2 * 104.0/255.0 - 1.0
         images_masked[:, 2, 32+4:32+64-4, 32+4:32+64-4] = 2 * 123.0/255.0 - 1.0
-        return self.encoder(images_masked).view(images.shape[0], -1)
+        return self.encoder(images_masked)
+
+
+class Flatten(nn.Module):
+    def __init__(self):
+        super(Flatten, self).__init__()
+
+    def forward(self, feat):
+        return feat.view(feat.size(0), -1)

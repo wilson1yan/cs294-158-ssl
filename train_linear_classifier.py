@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import torch.optim.lr_scheduler as lr_scheduler
 
 from deepul_helper.data import get_datasets
 from deepul_helper.utils import AverageMeter, ProgressMeter, remove_module_state_dict
@@ -20,8 +21,8 @@ def main():
     parser.add_argument('-t', '--task', type=str, required=True,
                         help='context_encoder|rotation|cpc|simclr')
     parser.add_argument('--lr', type=float, default=0.1)
-    parser.add_argument('-e', '--epochs', type=int, default=50)
-    parser.add_argument('-b', '--batch_size', type=int, default=128)
+    parser.add_argument('-e', '--epochs', type=int, default=500)
+    parser.add_argument('-b', '--batch_size', type=int, default=256)
     parser.add_argument('-i', '--log_interval', type=int, default=10)
     args = parser.parse_args()
 
@@ -60,11 +61,14 @@ def main():
 
     linear_classifier = model.construct_classifier().cuda()
     optimizer = optim.SGD(linear_classifier.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
+    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=5)
 
     best_acc = 0
     for epoch in range(args.epochs):
         train(train_loader, model, linear_classifier, optimizer, epoch, args)
         acc = validate(test_loader, model, linear_classifier, args)
+
+        scheduler.step(acc)
 
         is_best = acc > best_acc
         best_acc = max(acc, best_acc)
@@ -72,7 +76,8 @@ def main():
             'epoch': epoch + 1,
             'state_dict': linear_classifier.state_dict(),
             'best_acc': best_acc,
-            'optimizer': optimizer.state_dict()
+            'optimizer': optimizer.state_dict(),
+            'scheduler': scheduler.state_dict()
         }, is_best, args)
 
 
@@ -99,7 +104,7 @@ def train(train_loader, model, linear_classifier, optimizer, epoch, args):
 
         with torch.no_grad():
             zs = model.encode(images)
-        logits = linear_classifier(zs)
+        logits = linear_classifier(zs.detach())
         loss = F.cross_entropy(logits, target)
 
         acc1, acc5 = accuracy(logits, target, topk=(1, 5))

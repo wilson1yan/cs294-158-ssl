@@ -29,6 +29,7 @@ parser.add_argument('--lr', type=float, default=0.1, help='default: 0.1')
 parser.add_argument('-m', '--momentum', type=float, default=0.9, help='default: 0.9')
 parser.add_argument('-w', '--weight_decay', type=int, default=5e-4, help='default: 5e-4')
 
+parser.add_argument('-p', '--port', type=int, default=23456, help='tcp port for distributed trainign (default: 23456)')
 parser.add_argument('-i', '--log_interval', type=int, default=10, help='default: 10')
 
 
@@ -51,7 +52,7 @@ def main_worker(gpu, ngpus, args):
     global best_loss
 
     print(f'Starting process on GPU: {gpu}')
-    dist.init_process_group(backend='nccl', init_method='tcp://localhost:23456',
+    dist.init_process_group(backend='nccl', init_method=f'tcp://localhost:{args.port}',
                             world_size=ngpus, rank=gpu)
     args.batch_size = args.batch_size // ngpus
 
@@ -203,6 +204,7 @@ def validate(val_loader, model, linear_classifier, args):
 
     # switch to evaluate mode
     model.eval()
+    linear_classifier.eval()
 
     with torch.no_grad():
         end = time.time()

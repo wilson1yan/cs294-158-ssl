@@ -49,7 +49,7 @@ class SimCLR(nn.Module):
         sim_matrix = torch.matmul(z, z.t()) # (2N, 2N)
         sim_matrix = sim_matrix / self.temperature
         # Mask out same-sample terms
-        sim_matrix[:, torch.arange(2 * n)]  = -float('inf')
+        sim_matrix[torch.arange(2*n), torch.arange(2*n)]  = -float('inf')
 
         targets = torch.cat((torch.arange(n) + n, torch.arange(n)), dim=0)
         targets = targets.to(sim_matrix.get_device()).long()

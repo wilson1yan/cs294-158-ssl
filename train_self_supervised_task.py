@@ -158,16 +158,18 @@ def train(train_loader, model, linear_classifier, optimizer,
         data_time.update(time.time() - end)
 
         # compute loss
-        if isinstance(images, tuple):
+        if isinstance(images, (tuple, list)):
             # Special case for SimCLR which returns a tuple of 2 image batches
+            bs = images[0].shape[0]
             images = [x.cuda(args.gpu, non_blocking=True)
                       for x in images]
         else:
+            bs = images.shape[0]
             images = images.cuda(args.gpu, non_blocking=True)
         target = target.cuda(args.gpu, non_blocking=True)
         out, zs = model(images)
         for k, v in out.items():
-            avg_meters[k].update(v.item(), images.shape[0])
+            avg_meters[k].update(v.item(), bs)
 
         # compute gradient and optimizer step for ssl task
         optimizer.zero_grad()
@@ -179,8 +181,8 @@ def train(train_loader, model, linear_classifier, optimizer,
         loss = F.cross_entropy(logits, target)
 
         acc1, acc5 = accuracy(logits, target, topk=(1, 5))
-        top1.update(acc1[0], images.shape[0])
-        top5.update(acc5[0], images.shape[0])
+        top1.update(acc1[0], bs)
+        top5.update(acc5[0], bs)
 
         optimizer_linear.zero_grad()
         loss.backward()
@@ -217,19 +219,21 @@ def validate(val_loader, model, linear_classifier, args):
             # compute and measure loss
             if isinstance(images, tuple):
                 # Special case for SimCLR which returns a tuple of 2 image batches
+                bs = images[0].shape[0]
                 images = [x.cuda(args.gpu, non_blocking=True)
                         for x in images]
             else:
+                bs = images.shape[0]
                 images = images.cuda(args.gpu, non_blocking=True)
             target = target.cuda(args.gpu, non_blocking=True)
             out, zs = model(images)
             for k, v in out.items():
-                avg_meters[k].update(v.item(), images.shape[0])
+                avg_meters[k].update(v.item(), bs)
 
             logits = linear_classifier(zs)
             acc1, acc5 = accuracy(logits, target, topk=(1, 5))
-            top1.update(acc1[0], images.shape[0])
-            top5.update(acc5[0], images.shape[0])
+            top1.update(acc1[0], bs)
+            top5.update(acc5[0], bs)
 
             # measure elapsed time
             batch_time.update(time.time() - end)

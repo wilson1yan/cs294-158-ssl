@@ -157,7 +157,12 @@ def train(train_loader, model, linear_classifier, optimizer,
         data_time.update(time.time() - end)
 
         # compute loss
-        images = images.cuda(args.gpu, non_blocking=True)
+        if isinstance(images, tuple):
+            # Special case for SimCLR which returns a tuple of 2 image batches
+            images = [x.cuda(args.gpu, non_blocking=True)
+                      for x in images]
+        else:
+            images = images.cuda(args.gpu, non_blocking=True)
         target = target.cuda(args.gpu, non_blocking=True)
         out, zs = model(images)
         for k, v in out.items():
@@ -208,7 +213,12 @@ def validate(val_loader, model, linear_classifier, args):
         end = time.time()
         for i, (images, target) in enumerate(val_loader):
             # compute and measure loss
-            images = images.cuda(args.gpu, non_blocking=True)
+            if isinstance(images, tuple):
+                # Special case for SimCLR which returns a tuple of 2 image batches
+                images = [x.cuda(args.gpu, non_blocking=True)
+                        for x in images]
+            else:
+                images = images.cuda(args.gpu, non_blocking=True)
             target = target.cuda(args.gpu, non_blocking=True)
             out, zs = model(images)
             for k, v in out.items():

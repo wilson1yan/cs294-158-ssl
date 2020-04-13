@@ -8,7 +8,7 @@ class SimCLR(nn.Module):
     metrics = ['Loss']
     metrics_fmt = [':.4e']
 
-    def __init__(self, dataset, n_classes):
+    def __init__(self, dataset, n_classes, dist):
         super().__init__()
         self.temperature = 0.5
 
@@ -30,6 +30,7 @@ class SimCLR(nn.Module):
 
         self.dataset = dataset
         self.n_classes = n_classes
+        self.dist = dist
 
     def construct_classifier(self):
         return nn.Sequential(nn.BatchNorm1d(self.latent_dim, affine=False),
@@ -45,13 +46,23 @@ class SimCLR(nn.Module):
         # Each training example has 2N - 2 negative samples
         # 2N total samples, but exclude the current and positive sample
 
-        z = torch.cat((zi, zj), dim=0) # (2N, projection_dim)
-        sim_matrix = torch.matmul(z, z.t()) # (2N, 2N)
+        zis = [torch.zeros_like(zi) for _ in range(dist.get_world_size())]
+        zjs = [torch.zeros_like(zj) for _ in range(dist.get_world_size())]
+
+        dist.all_gather(zis, zi)
+        dist.all_gather(zjs, zj)
+
+        z1 = torch.cat((zi, zj), dim=0) # (2N, projection_dim)
+        z2 = torch.cat(zis + zjs, dim=0) # (2N * n_gpus, projection_dim)
+
+        sim_matrix = torch.matmul(z1, z2.t()) # (2N, 2N * n_gpus)
         sim_matrix = sim_matrix / self.temperature
         # Mask out same-sample terms
-        sim_matrix[torch.arange(2*n), torch.arange(2*n)]  = -float('inf')
+        n_gpus = dist.get_world_size()
+        sim_matrix[torch.arange(n), torch.arange(n)]  = -float('inf')
+        sim_matrix[torch.arange(n, 2*n), torch.arange(n*n_gpus, n*n_gpus+n)] = -float('inf')
 
-        targets = torch.cat((torch.arange(n) + n, torch.arange(n)), dim=0)
+        targets = torch.cat((torch.arange(n*n_gpus, n*n_gpus+n), torch.arange(n)), dim=0)
         targets = targets.to(sim_matrix.get_device()).long()
 
         loss = F.cross_entropy(sim_matrix, targets, reduction='sum')

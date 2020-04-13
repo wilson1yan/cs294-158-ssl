@@ -217,7 +217,7 @@ def validate(val_loader, model, linear_classifier, args):
         end = time.time()
         for i, (images, target) in enumerate(val_loader):
             # compute and measure loss
-            if isinstance(images, tuple):
+            if isinstance(images, (tuple, list)):
                 # Special case for SimCLR which returns a tuple of 2 image batches
                 bs = images[0].shape[0]
                 images = [x.cuda(args.gpu, non_blocking=True)

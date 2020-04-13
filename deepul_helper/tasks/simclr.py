@@ -19,6 +19,8 @@ class SimCLR(nn.Module):
             self.latent_dim = 2048
             self.projection_dim = 128
 
+        # Global BatchNorm for Multi-GPU training
+        resnet = nn.SyncBatchNorm.convert_sync_batchnorm(resnet)
         resnet = models.resnet18(pretrained=False)
         num_ftrs = resnet.fc.in_features
         self.features = nn.Sequential(*list(resnet.children())[:-1])

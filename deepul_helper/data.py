@@ -70,21 +70,39 @@ def get_transform(dataset, task, train=True):
                 transforms.Normalize((0.5,), (0.5,)),
             ])
     elif task == 'simclr':
-        transform = []
         if dataset == 'cifar10':
-            transform.append(transforms.Resize(224))
-            transform.append(transforms.CenterCrop(224))
-        else:
-            transform.append(transforms.RandomResizedCrop(224))
-        color_jitter = transforms.ColorJitter(0.8, 0.8, 0.8, 0.2)
-        transform.extend([
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomApply([color_jitter], p=0.8),
-            transforms.RandomGrayscale(p=0.2),
-            GaussianBlur(kernel_size=21),
-            transforms.ToTensor()
-        ])
-        transform = transforms.Compose(transform)
+            if train:
+                transform = transforms.Compose([
+                    transforms.RandomResizedCrop(32),
+                    transforms.RandomHorizontalFlip(p=0.5),
+                    transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+                    transforms.RandomGrayscale(p=0.2),
+                    transforms.ToTensor(),
+                    transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
+                ])
+            else:
+                transform = transforms.Compose([
+                    transforms.ToTensor(),
+                    transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
+                ])
+        elif 'imagenet' in dataset:
+            if train:
+                transform = transforms.Compose([
+                    transforms.RandomResizedCrop(224),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+                    transforms.RandomGrayscale(p=0.2),
+                    GaussianBlur(kernel_size=21),
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+                ])
+            else:
+                transform = transforms.Compose([
+                    transforms.Resize(224),
+                    transforms.CenterCrop(224),
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+                ])
         transform = SimCLRDataTransform(transform)
     else:
         raise Exception('Invalid task:', task)

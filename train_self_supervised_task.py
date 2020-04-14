@@ -27,7 +27,7 @@ parser.add_argument('-e', '--epochs', type=int, default=200, help='default: 200'
 parser.add_argument('-o', '--optimizer', type=str, default='sgd', help='sgd|adam (default: sgd)')
 parser.add_argument('--lr', type=float, default=0.1, help='default: 0.1')
 parser.add_argument('-m', '--momentum', type=float, default=0.9, help='default: 0.9')
-parser.add_argument('-w', '--weight_decay', type=int, default=5e-4, help='default: 5e-4')
+parser.add_argument('-w', '--weight_decay', type=float, default=5e-4, help='default: 5e-4')
 
 parser.add_argument('-p', '--port', type=int, default=23456, help='tcp port for distributed trainign (default: 23456)')
 parser.add_argument('-i', '--log_interval', type=int, default=10, help='default: 10')

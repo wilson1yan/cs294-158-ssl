@@ -95,9 +95,9 @@ def main_worker(gpu, ngpus, args):
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum,
                                     weight_decay=args.weight_decay, nesterov=True)
         optimizer_linear = torch.optim.SGD(linear_classifier.parameters(), lr=args.lr,
-                                           momentum=args.momentum, nesterov=True)
+                                           momentum=args.momentum, nesterov=True, weight_decay=args.weight_decay)
     elif args.optimizer == 'adam':
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(args.momentum, 0.999)
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(args.momentum, 0.999),
                                      weight_decay=args.weight_decay)
         optimizer_linear = torch.optim.Adam(linear_classifier.parameters(), lr=args.lr,
                                             betas=(args.momentum, 0.999), weight_decay=args.weight_decay)

@@ -36,7 +36,7 @@ class SimCLR(nn.Module):
         self.dist = dist
 
     def construct_classifier(self):
-        return nn.Sequential(nn.BatchNorm1d(self.latent_dim, affine=False), nn.Linear(self.latent_dim, self.n_classes))
+        return nn.Sequential(nn.Linear(self.latent_dim, self.n_classes))
 
     def forward(self, images):
         n = images[0].shape[0]
@@ -57,14 +57,16 @@ class SimCLR(nn.Module):
         z1 = torch.cat((zi, zj), dim=0) # (2N, projection_dim)
         z2 = torch.cat(zis + zjs, dim=0) # (2N * n_gpus, projection_dim)
 
-        sim_matrix = torch.matmul(z1, z2.t()) # (2N, 2N * n_gpus)
+        sim_matrix = torch.mm(z1, z2.t()) # (2N, 2N * n_gpus)
         sim_matrix = sim_matrix / self.temperature
         # Mask out same-sample terms
         n_gpus = self.dist.get_world_size()
-        sim_matrix[torch.arange(n), torch.arange(n)]  = -float('inf')
-        sim_matrix[torch.arange(n, 2*n), torch.arange(n*n_gpus, n*n_gpus+n)] = -float('inf')
+        rank = self.dist.get_rank()
+        sim_matrix[torch.arange(n), torch.arange(rank*n, (rank+1)*n)]  = -float('inf')
+        sim_matrix[torch.arange(n, 2*n), torch.arange((n_gpus+rank)*n, (n_gpus+rank+1)*n)] = -float('inf')
 
-        targets = torch.cat((torch.arange(n*n_gpus, n*n_gpus+n), torch.arange(n)), dim=0)
+        targets = torch.cat((torch.arange((n_gpus+rank)*n, (n_gpus+rank+1)*n),
+                             torch.arange(rank*n, (rank+1)*n)), dim=0)
         targets = targets.to(sim_matrix.get_device()).long()
 
         loss = F.cross_entropy(sim_matrix, targets, reduction='sum')

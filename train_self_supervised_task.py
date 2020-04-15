@@ -105,8 +105,8 @@ def main_worker(gpu, ngpus, args):
         raise Exception('Unsupported optimizer', args.optimizer)
 
     # Minimize SSL task loss, maximize linear classification accuracy
-    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=5)
-    scheduler_linear = lr_scheduler.ReduceLROnPlateau(optimizer_linear, 'max', patience=5)
+    #scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=5)
+    #scheduler_linear = lr_scheduler.ReduceLROnPlateau(optimizer_linear, 'max', patience=5)
 
     for epoch in range(args.epochs):
         train_sampler.set_epoch(epoch)
@@ -116,8 +116,8 @@ def main_worker(gpu, ngpus, args):
 
         val_loss, val_acc = validate(val_loader, model, linear_classifier, args)
 
-        scheduler.step(val_loss)
-        scheduler_linear.step(val_acc)
+       # scheduler.step(val_loss)
+       # scheduler_linear.step(val_acc)
 
         is_best = val_loss < best_loss
         best_loss = min(val_loss, best_loss)
@@ -126,10 +126,10 @@ def main_worker(gpu, ngpus, args):
                 'epoch': epoch + 1,
                 'state_dict': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
-                'scheduler': scheduler.state_dict(),
+                #'scheduler': scheduler.state_dict(),
                 'state_dict_linear': linear_classifier.state_dict(),
                 'optimizer_linear': optimizer_linear.state_dict(),
-                'schedular_linear': scheduler_linear.state_dict(),
+                #'schedular_linear': scheduler_linear.state_dict(),
                 'best_loss': best_loss,
                 'best_acc': val_acc
             }, is_best, args)

@@ -59,12 +59,12 @@ def main_worker(gpu, ngpus, args):
     train_dataset, val_dataset, n_classes = get_datasets(args.dataset, args.task)
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, num_workers=4,
+        train_dataset, batch_size=args.batch_size, num_workers=16,
         pin_memory=True, sampler=train_sampler, drop_last=True
     )
 
     val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=args.batch_size, num_workers=4,
+        val_dataset, batch_size=args.batch_size, num_workers=16,
         pin_memory=True, drop_last=True
     )
 

@@ -11,7 +11,6 @@ class SimCLR(nn.Module):
     def __init__(self, dataset, n_classes, dist):
         super().__init__()
         self.temperature = 0.5
-        self.latent_dim = 2048
         self.projection_dim = 128
 
         if dataset == 'cifar10':
@@ -24,16 +23,19 @@ class SimCLR(nn.Module):
                 if not isinstance(module, (nn.Linear, nn.MaxPool2d)):
                     self.features.append(module)
             self.features = nn.Sequential(*self.features)
+            self.latent_dim = 512
         elif 'imagenet' in dataset:
             resnet = models.resnset50()
             resnet = nn.SyncBatchNorm.convert_sync_batchnorm(resnet)
             self.features = nn.Sequential(*list(resnet.get_children())[:-1])
+            self.latent_dim = 2048
 
         self.proj = nn.Sequential(
-            nn.Linear(2048, 512, bias=False),
-            nn.BatchNorm1d(512),
+            nn.Linear(self.latent_dim, self.projection_dim, bias=False),
+            nn.BatchNorm1d(self.projection_dim),
             nn.ReLU(inplace=True),
-            nn.Linear(512, self.projection_dim)
+            nn.Linear(self.projection_dim, self.projection_dim, bias=False),
+            nn.BatchNorm1d(self.projection_dim)
         )
 
         self.dataset = dataset

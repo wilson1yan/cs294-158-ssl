@@ -15,7 +15,6 @@ class LARS(Optimizer):
         weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
             ("\beta")
         eta (float, optional): LARS coefficient
-        max_epoch: maximum training epoch to determine polynomial LR decay.
 
     Based on Algorithm 1 of the following paper by You, Gitman, and Ginsburg.
     Large Batch Training of Convolutional Networks:
@@ -28,7 +27,7 @@ class LARS(Optimizer):
         >>> optimizer.step()
     """
     def __init__(self, params, lr=required, momentum=.9,
-                 weight_decay=.0005, eta=0.001, max_epoch=200):
+                 weight_decay=.0005, eta=0.001):
         if lr is not required and lr < 0.0:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if momentum < 0.0:
@@ -42,7 +41,7 @@ class LARS(Optimizer):
         self.epoch = 0
         defaults = dict(lr=lr, momentum=momentum,
                         weight_decay=weight_decay,
-                        eta=eta, max_epoch=max_epoch)
+                        eta=eta)
         super(LARS, self).__init__(params, defaults)
 
     def step(self, epoch=None, closure=None):
@@ -67,7 +66,6 @@ class LARS(Optimizer):
             momentum = group['momentum']
             eta = group['eta']
             lr = group['lr']
-            max_epoch = group['max_epoch']
 
             for p in group['params']:
                 if p.grad is None:
@@ -79,16 +77,12 @@ class LARS(Optimizer):
                 weight_norm = torch.norm(p.data)
                 grad_norm = torch.norm(d_p)
 
-                # Global LR computed on polynomial decay schedule
-                decay = (1 - float(epoch) / max_epoch) ** 2
-                global_lr = lr * decay
-
                 # Compute local learning rate for this layer
                 local_lr = eta * weight_norm / \
                     (grad_norm + weight_decay * weight_norm)
 
                 # Update the momentum term
-                actual_lr = local_lr * global_lr
+                actual_lr = local_lr * lr
 
                 if 'momentum_buffer' not in param_state:
                     buf = param_state['momentum_buffer'] = \

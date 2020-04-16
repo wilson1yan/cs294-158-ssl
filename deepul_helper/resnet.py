@@ -1,126 +1,174 @@
-''' Taken from https://github.com/kuangliu/pytorch-cifar
-ResNet in PyTorch.
-For Pre-activation ResNet, see 'preact_resnet.py'.
-Reference:
-[1] Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
-    Deep Residual Learning for Image Recognition. arXiv:1512.03385
-'''
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.checkpoint import checkpoint
 
+from .batch_norm import BatchNorm1d, BatchNorm2d
 
-class ToggleBatchNorm2d(nn.Module):
-    def __init__(self, use_batchnorm, *args, **kwargs):
+class BatchNormReLU(nn.Module):
+
+    def __init__(self, in_features, bn_cls=BatchNorm2d, relu=True, center=True, scale=True):
         super().__init__()
-        if use_batchnorm:
-            self._module = nn.BatchNorm2d(*args, **kwargs)
-        else:
-            self._module = nn.Identity()
+        assert bn_cls in [BatchNorm1d, BatchNorm2d], 'Must use custom 1D or 2D BatchNorm'
 
+        self.relu = relu
+        self.bn = bn_cls(in_features, center=center, scale=scale)
+    
     def forward(self, x):
-        return self._module(x)
+        x = self.bn(x)
+        if self.relu:
+            x = F.relu(x, inplace=True)
+        return x
 
 
-class BasicBlock(nn.Module):
-    expansion = 1
+def fixed_padding(inputs, kernel_size):
+    pad_total = kernel_size - 1
+    pad_beg = pad_total // 2
+    pad_end = pad_total - pad_beg
+    padded_inputs = F.pad(inputs, (pad_beg, pad_end, pad_beg, pad_end))
+    return padded_inputs
 
-    def __init__(self, in_planes, planes, stride=1, use_batchnorm=True):
-        super(BasicBlock, self).__init__()
-        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn1 = ToggleBatchNorm2d(use_batchnorm, planes)
-        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn2 = ToggleBatchNorm2d(use_batchnorm, planes)
 
-        self.shortcut = nn.Sequential()
-        if stride != 1 or in_planes != self.expansion*planes:
-            self.shortcut = nn.Sequential(
-                nn.Conv2d(in_planes, self.expansion*planes, kernel_size=1, stride=stride, bias=False),
-                ToggleBatchNorm2d(use_batchnorm, self.expansion*planes)
-            )
+class Conv2dFixedPad(nn.Module):
+    
+    def __init__(self, in_channels, out_channels, kernel_size, stride):
+        super().__init__()
 
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride,
+                              padding=(kernel_size // 2 if stride == 1 else 0), bias=False)
+
+        self.stride = stride
+        self.kernel_size = kernel_size
+    
     def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = self.bn2(self.conv2(out))
-        out += self.shortcut(x)
-        out = F.relu(out)
-        return out
+        if self.stride > 1:
+            x = fixed_padding(x, self.kernel_size)
+        return self.conv(x)
 
+    
+class ResidualBlock(nn.Module):
 
-class Bottleneck(nn.Module):
-    expansion = 4
+    def __init__(self, in_channels, filters, stride, use_projection=False):
+        super().__init__()
+        if use_projection:
+            self.proj_conv = Conv2dFixedPad(in_channels, filters, kernel_size=1, stride=stride)
+            self.proj_bnr = BatchNormReLU(filters, relu=False)
+        
+        self.conv1 = Conv2dFixedPad(in_channels, filters, kernel_size=3, stride=stride)
+        self.bnr1 = BatchNormReLU(filters)
 
-    def __init__(self, in_planes, planes, stride=1, use_batchnorm=True):
-        super(Bottleneck, self).__init__()
-        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=1, bias=False)
-        self.bn1 = ToggleBatchNorm2d(use_batchnorm, planes)
-        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn2 = ToggleBatchNorm2d(use_batchnorm, planes)
-        self.conv3 = nn.Conv2d(planes, self.expansion*planes, kernel_size=1, bias=False)
-        self.bn3 = ToggleBatchNorm2d(use_batchnorm, self.expansion*planes)
+        self.conv2 = Conv2dFixedPad(filters, filters, kernel_size=3, stride=1)
+        self.bnr2 = BatchNormReLU(filters)
 
-        self.shortcut = nn.Sequential()
-        if stride != 1 or in_planes != self.expansion*planes:
-            self.shortcut = nn.Sequential(
-                nn.Conv2d(in_planes, self.expansion*planes, kernel_size=1, stride=stride, bias=False),
-                ToggleBatchNorm2d(use_batchnorm, self.expansion*planes)
-            )
-
+        self.use_projection = use_projection
+    
     def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = F.relu(self.bn2(self.conv2(out)))
-        out = self.bn3(self.conv3(out))
-        out += self.shortcut(x)
-        out = F.relu(out)
-        return out
+        shortcut = x
+        if self.use_projection:
+            shortcut = self.proj_bnr(self.proj_conv(x))
+        x = self.bnr1(self.conv1(x))
+        x = self.bnr2(self.conv2(x))
+
+        return F.relu(x + shortcut, inplace=True)
+    
+
+class BottleneckBlock(nn.Module):
+
+    def __init__(self, in_channels, filters, stride, use_projection=False):
+        super().__init__()
+
+        if use_projection:
+            filters_out = 4 * filters
+            self.proj_conv = Conv2dFixedPad(in_channels, filters_out, kernel_size=1, stride=stride)
+            self.proj_bnr = BatchNormReLU(filters_out, relu=False)
+        
+        self.conv1 = Conv2dFixedPad(in_channels, filters, kernel_size=1, stride=1)
+        self.bnr1 = BatchNormReLU(filters)
+
+        self.conv2 = Conv2dFixedPad(filters, filters, kernel_size=3, stride=stride)
+        self.bnr2 = BatchNormReLU(filters)
+
+        self.conv3 = Conv2dFixedPad(filters, 4 * filters, kernel_size=1, stride=1)
+        self.bnr3 = BatchNormReLU(4 * filters)
+
+        self.use_projection = use_projection
+    
+    def forward(self, x):
+        shortcut = x
+        if self.use_projection:
+            shortcut = self.proj_bnr(self.proj_conv(x))
+        x = self.bnr1(self.conv1(x))
+        x = self.bnr2(self.conv2(x))
+        x = self.bnr3(self.conv3(x))
+        
+        return F.relu(x + shortcut, inplace=True)
+    
+
+class BlockGroup(nn.Module):
+
+    def __init__(self, in_channels, filters, block_fn, blocks, stride):
+        super().__init__()
+
+        self.start_block = block_fn(in_channels, filters, stride, use_projection=True)
+        self.blocks = []
+        for _ in range(1, blocks):
+            if block_fn == BottleneckBlock:
+                in_channels *= 4
+            self.blocks.append(block_fn(in_channels, filters, 1))
+        self.blocks = nn.Sequential(*self.blocks)
+    
+    def forward(self, x):
+        x = self.start_block(x)
+        x = self.blocks(x)
+        return x
 
 
 class ResNet(nn.Module):
-    def __init__(self, input_channels, block, num_blocks, output_dim=None, use_batchnorm=True):
-        super(ResNet, self).__init__()
-        self.output_dim = output_dim
-        self.use_batchnorm = use_batchnorm
-        self.in_planes = 32
 
-        self.conv1 = nn.Conv2d(input_channels, 32, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn1 = ToggleBatchNorm2d(use_batchnorm, 32)
-        self.layer1 = self._make_layer(block, 64, num_blocks[0], stride=2)
-        self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
-        self.layer4 = self._make_layer(block, 1024, num_blocks[3], stride=2)
+    def __init__(self, block_fn, layers, width_multiplier, cifar_stem=False):
+        super().__init__()
 
-        if output_dim is not None:
-            self.linear = nn.Linear(1024*block.expansion, output_dim)
-
-    def _make_layer(self, block, planes, num_blocks, stride):
-        strides = [stride] + [1]*(num_blocks-1)
-        layers = []
-        for stride in strides:
-            layers.append(block(self.in_planes, planes, stride, use_batchnorm=self.use_batchnorm))
-            self.in_planes = planes * block.expansion
-        return nn.Sequential(*layers)
-
+        if cifar_stem:
+            self.stem = nn.Sequential(
+                Conv2dFixedPad(3, 64 * width_multiplier, kernel_size=3, stride=1),
+                BatchNormReLU(64 * width_multiplier)
+            )
+        else:
+            self.stem = nn.Sequential(
+                Conv2dFixedPad(3, 64 * width_multiplier, kernel_size=7, stride=2),
+                BatchNormReLU(64 * width_multiplier),
+                nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+            )
+        
+        self.group1 = BlockGroup(64 * width_multiplier, 64 * width_multiplier, 
+                                 block_fn=block_fn, blocks=layers[0], stride=1)
+        self.group2 = BlockGroup(64 * width_multiplier, 128 * width_multiplier,
+                                 block_fn=block_fn, blocks=layers[1], stride=2)
+        self.group3 = BlockGroup(128 * width_multiplier, 256 * width_multiplier,
+                                 block_fn=block_fn, blocks=layers[2], stride=2)
+        self.group4 = BlockGroup(256 * width_multiplier, 512 * width_multiplier,
+                                 block_fn=block_fn, blocks=layers[3], stride=2)
+        
     def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = checkpoint(self.layer1, out)
-        out = checkpoint(self.layer2, out)
-        out = checkpoint(self.layer3, out)
-        out = checkpoint(self.layer4, out)
+        x = self.stem(x)
+        x = self.group1(x)
+        x = self.group2(x)
+        x = self.group3(x)
+        x = self.group4(x)
+        x = torch.mean(x, dim=[2, 3]).squeeze()
+        return x
 
-        if self.output_dim is not None:
-            out = F.avg_pool2d(out, 4)
-            out = out.view(out.size(0), -1)
-            out = self.linear(out)
-        return out
+def resnet_v1(resnet_depth, width_multiplier, cifar_stem=False):
+    model_params = {
+        18: {'block': ResidualBlock, 'layers': [2, 2, 2, 2]},
+        34: {'block': ResidualBlock, 'layers': [3, 4, 6, 3]},
+        50: {'block': BottleneckBlock, 'layers': [3, 4, 6, 3]},
+        101: {'block': BottleneckBlock, 'layers': [3, 4, 23, 3]},
+        152: {'block': BottleneckBlock, 'layers': [3, 8, 36, 3]},
+        200: {'block': BottleneckBlock, 'layers': [3, 24, 36, 3]}
+    }
 
-
-def ResNet18(input_channels, use_batchnorm=True):
-    return ResNet(input_channels, BasicBlock, [2,2,2,2], use_batchnorm=use_batchnorm)
-
-def ResNet34(input_channels, use_batchnorm=True):
-    return ResNet(input_channels, BasicBlock, [3,4,6,3], use_batchnorm=use_batchnorm)
-
-def ResNet50(input_channels, use_batchnorm=True):
-    return ResNet(input_channels, Bottleneck, [3,4,6,3], use_batchnorm=use_batchnorm)
-
+    if resnet_depth not in model_params:
+        raise ValueERror('Not a valid resnet_depth:', resnet_depth)
+    
+    params = model_params[resnet_depth]
+    return ResNet(params['block'], params['layers'], width_multiplier, cifar_stem=cifar_stem)

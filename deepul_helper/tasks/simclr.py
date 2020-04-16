@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.models as models
+
+from deepul_helper.resnet import resnet_v1
+from deepul_helper.batch_norm import SyncBatchNorm, BatchNorm1d
 
 # Some code adapted from https://github.com/sthalles/SimCLR
 class SimCLR(nn.Module):
@@ -14,28 +16,22 @@ class SimCLR(nn.Module):
         self.projection_dim = 128
 
         if dataset == 'cifar10':
-            resnet = models.resnet18()
-            resnet = nn.SyncBatchNorm.convert_sync_batchnorm(resnet)
-            self.features = []
-            for name, module in resnet.named_children():
-                if name == 'conv1':
-                    module = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-                if not isinstance(module, (nn.Linear, nn.MaxPool2d)):
-                    self.features.append(module)
-            self.features = nn.Sequential(*self.features)
+            resnet = resnet_v1(18, 1, cifar_stem=True)
+            resnet = SyncBatchNorm.convert_sync_batchnorm(resnet)
+            self.features = resnet
             self.latent_dim = 512
         elif 'imagenet' in dataset:
-            resnet = models.resnset50()
+            resnet = resnet_v1(50, 4, cifar_stem=False)
             resnet = nn.SyncBatchNorm.convert_sync_batchnorm(resnet)
-            self.features = nn.Sequential(*list(resnet.get_children())[:-1])
+            self.features = resnet
             self.latent_dim = 2048
 
         self.proj = nn.Sequential(
             nn.Linear(self.latent_dim, self.projection_dim, bias=False),
-            nn.BatchNorm1d(self.projection_dim),
+            BatchNorm1d(self.projection_dim),
             nn.ReLU(inplace=True),
             nn.Linear(self.projection_dim, self.projection_dim, bias=False),
-            nn.BatchNorm1d(self.projection_dim)
+            BatchNorm1d(self.projection_dim, center=False)
         )
 
         self.dataset = dataset
@@ -81,5 +77,5 @@ class SimCLR(nn.Module):
         return dict(Loss=loss), hi
 
     def encode(self, images):
-        return self.features(images).squeeze()
+        return self.features(images)
 

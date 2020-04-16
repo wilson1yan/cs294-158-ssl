@@ -3,6 +3,7 @@ import os
 import os.path as osp
 import time
 import shutil
+from warmup_schedular import GradualWarmupScheduler
 
 import torch
 import torch.nn as nn
@@ -14,6 +15,7 @@ import torch.optim.lr_scheduler as lr_scheduler
 from deepul_helper.tasks import *
 from deepul_helper.utils import AverageMeter, ProgressMeter
 from deepul_helper.data import get_datasets
+from deepul_helper.lars import LARS
 
 
 parser = argparse.ArgumentParser()
@@ -24,10 +26,12 @@ parser.add_argument('-t', '--task', type=str, default='rotation',
 # Training parameters
 parser.add_argument('-b', '--batch_size', type=int, default=128, help='batch size total for all gpus (default: 128)')
 parser.add_argument('-e', '--epochs', type=int, default=200, help='default: 200')
-parser.add_argument('-o', '--optimizer', type=str, default='sgd', help='sgd|adam (default: sgd)')
+parser.add_argument('-o', '--optimizer', type=str, default='sgd', help='sgd|lars|adam (default: sgd)')
 parser.add_argument('--lr', type=float, default=0.1, help='default: 0.1')
 parser.add_argument('-m', '--momentum', type=float, default=0.9, help='default: 0.9')
 parser.add_argument('-w', '--weight_decay', type=float, default=5e-4, help='default: 5e-4')
+parser.add_argument('-u', '--warmup_epochs', type=int, default=0, 
+                    help='# of warmup epochs. If > 0, then the scheduler warmups from lr * batch_size / 256.')
 
 parser.add_argument('-p', '--port', type=int, default=23456, help='tcp port for distributed trainign (default: 23456)')
 parser.add_argument('-i', '--log_interval', type=int, default=10, help='default: 10')
@@ -96,18 +100,29 @@ def main_worker(gpu, ngpus, args):
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum,
                                     weight_decay=args.weight_decay, nesterov=True)
         optimizer_linear = torch.optim.SGD(linear_classifier.parameters(), lr=args.lr,
-                                           momentum=args.momentum, nesterov=True, weight_decay=args.weight_decay)
+                                           momentum=args.momentum, nesterov=True)
     elif args.optimizer == 'adam':
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(args.momentum, 0.999),
                                      weight_decay=args.weight_decay)
         optimizer_linear = torch.optim.Adam(linear_classifier.parameters(), lr=args.lr,
-                                            betas=(args.momentum, 0.999), weight_decay=args.weight_decay)
+                                            betas=(args.momentum, 0.999))
+    elif args.optimizer == 'lars':
+        optimizer = LARS(model.parameters(), lr=args.lr, momentum=args.momentum,
+                         weight_decay=args.weight_decay)
+        optimizer_linear = LARS(linear_classifier.parameters(), lr=args.lr,
+                                momentum=args.momentum)
     else:
         raise Exception('Unsupported optimizer', args.optimizer)
 
     # Minimize SSL task loss, maximize linear classification accuracy
-    #scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=5)
-    #scheduler_linear = lr_scheduler.ReduceLROnPlateau(optimizer_linear, 'max', patience=5)
+    scheduler = lr_scheduler.CosineAnnealingLR(optimizer, args.epochs, 0, -1)
+    scheduler_linear = lr_scheduler.CosineAnnealingLR(optimizer_linear, args.epochs, 0, -1)
+    if args.warmup_epochs > 0:
+        scheduler = GradualWarmupScheduler(optimizer, multiplier=args.batch_size / 256.,
+                                           total_epoch=args.warmup_epochs, after_scheduler=scheduler)
+        scheduler_linear = GradualWarmupScheduler(optimizer, multiplier=args.batch_size / 256.,
+                                                  total_epoch=args.warmup_epochs, 
+                                                  after_scheduler=scheduler_linear)
 
     for epoch in range(args.epochs):
         train_sampler.set_epoch(epoch)
@@ -117,8 +132,8 @@ def main_worker(gpu, ngpus, args):
 
         val_loss, val_acc = validate(val_loader, model, linear_classifier, args)
 
-       # scheduler.step(val_loss)
-       # scheduler_linear.step(val_acc)
+        scheduler.step()
+        scheduler_linear.step()
 
         is_best = val_loss < best_loss
         best_loss = min(val_loss, best_loss)
@@ -127,10 +142,10 @@ def main_worker(gpu, ngpus, args):
                 'epoch': epoch + 1,
                 'state_dict': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
-                #'scheduler': scheduler.state_dict(),
+                'scheduler': scheduler.state_dict(),
                 'state_dict_linear': linear_classifier.state_dict(),
                 'optimizer_linear': optimizer_linear.state_dict(),
-                #'schedular_linear': scheduler_linear.state_dict(),
+                'schedular_linear': scheduler_linear.state_dict(),
                 'best_loss': best_loss,
                 'best_acc': val_acc
             }, is_best, args)

@@ -14,16 +14,21 @@ class SimCLR(nn.Module):
         self.latent_dim = 2048
         self.projection_dim = 128
 
-        # Global BatchNorm for Multi-GPU training
-        resnet = models.resnet50()
-        resnet = nn.SyncBatchNorm.convert_sync_batchnorm(resnet)
-        self.features = []
-        for name, module in resnet.named_children():
-            if name == 'conv1':
-                module = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-            if not isinstance(module, (nn.Linear, nn.MaxPool2d)):
-                self.features.append(module)
-        self.features = nn.Sequential(*self.features)
+        if dataset == 'cifar10':
+            resnet = models.resnet18()
+            resnet = nn.SyncBatchNorm.convert_sync_batchnorm(resnet)
+            self.features = []
+            for name, module in resnet.named_children():
+                if name == 'conv1':
+                    module = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+                if not isinstance(module, (nn.Linear, nn.MaxPool2d)):
+                    self.features.append(module)
+            self.features = nn.Sequential(*self.features)
+        elif 'imagenet' in dataset:
+            resnet = models.resnset50()
+            resnet = nn.SyncBatchNorm.convert_sync_batchnorm(resnet)
+            self.features = nn.Sequential(*list(resnet.get_children())[:-1])
+
         self.proj = nn.Sequential(
             nn.Linear(2048, 512, bias=False),
             nn.BatchNorm1d(512),
@@ -70,7 +75,7 @@ class SimCLR(nn.Module):
         targets = targets.to(sim_matrix.get_device()).long()
 
         loss = F.cross_entropy(sim_matrix, targets, reduction='sum')
-        loss = loss / (2 * n)
+        loss = loss / n
         return dict(Loss=loss), hi
 
     def encode(self, images):

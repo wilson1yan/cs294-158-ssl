@@ -63,9 +63,10 @@ def main_worker(gpu, ngpus, args):
         pin_memory=True, sampler=train_sampler, drop_last=True
     )
 
+    val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
     val_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=args.batch_size, num_workers=16,
-        pin_memory=True, drop_last=True
+        pin_memory=True, drop_last=True, sampler=val_sampler
     )
 
     if args.task == 'context_encoder':

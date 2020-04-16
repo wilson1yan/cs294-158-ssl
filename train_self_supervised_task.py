@@ -3,7 +3,7 @@ import os
 import os.path as osp
 import time
 import shutil
-from warmup_schedular import GradualWarmupScheduler
+from warmup_scheduler import GradualWarmupScheduler
 
 import torch
 import torch.nn as nn
@@ -30,7 +30,7 @@ parser.add_argument('-o', '--optimizer', type=str, default='sgd', help='sgd|lars
 parser.add_argument('--lr', type=float, default=0.1, help='default: 0.1')
 parser.add_argument('-m', '--momentum', type=float, default=0.9, help='default: 0.9')
 parser.add_argument('-w', '--weight_decay', type=float, default=5e-4, help='default: 5e-4')
-parser.add_argument('-u', '--warmup_epochs', type=int, default=0, 
+parser.add_argument('-u', '--warmup_epochs', type=int, default=0,
                     help='# of warmup epochs. If > 0, then the scheduler warmups from lr * batch_size / 256.')
 
 parser.add_argument('-p', '--port', type=int, default=23456, help='tcp port for distributed trainign (default: 23456)')
@@ -58,6 +58,7 @@ def main_worker(gpu, ngpus, args):
     print(f'Starting process on GPU: {gpu}')
     dist.init_process_group(backend='nccl', init_method=f'tcp://localhost:{args.port}',
                             world_size=ngpus, rank=gpu)
+    total_batch_size = args.batch_size
     args.batch_size = args.batch_size // ngpus
 
     train_dataset, val_dataset, n_classes = get_datasets(args.dataset, args.task)
@@ -118,10 +119,10 @@ def main_worker(gpu, ngpus, args):
     scheduler = lr_scheduler.CosineAnnealingLR(optimizer, args.epochs, 0, -1)
     scheduler_linear = lr_scheduler.CosineAnnealingLR(optimizer_linear, args.epochs, 0, -1)
     if args.warmup_epochs > 0:
-        scheduler = GradualWarmupScheduler(optimizer, multiplier=args.batch_size / 256.,
+        scheduler = GradualWarmupScheduler(optimizer, multiplier=total_batch_size / 256.,
                                            total_epoch=args.warmup_epochs, after_scheduler=scheduler)
-        scheduler_linear = GradualWarmupScheduler(optimizer, multiplier=args.batch_size / 256.,
-                                                  total_epoch=args.warmup_epochs, 
+        scheduler_linear = GradualWarmupScheduler(optimizer, multiplier=total_batch_size / 256.,
+                                                  total_epoch=args.warmup_epochs,
                                                   after_scheduler=scheduler_linear)
 
     for epoch in range(args.epochs):
@@ -130,14 +131,14 @@ def main_worker(gpu, ngpus, args):
         train(train_loader, model, linear_classifier,
               optimizer, optimizer_linear, epoch, args)
 
-        val_loss, val_acc = validate(val_loader, model, linear_classifier, args)
+        val_loss, val_acc = validate(val_loader, model, linear_classifier, args, dist)
 
         scheduler.step()
         scheduler_linear.step()
 
-        is_best = val_loss < best_loss
-        best_loss = min(val_loss, best_loss)
-        if gpu == 0:
+        if dist.get_rank() == 0:
+            is_best = val_loss < best_loss
+            best_loss = min(val_loss, best_loss)
             save_checkpoint({
                 'epoch': epoch + 1,
                 'state_dict': model.state_dict(),
@@ -213,7 +214,7 @@ def train(train_loader, model, linear_classifier, optimizer,
             progress.display(i)
 
 
-def validate(val_loader, model, linear_classifier, args):
+def validate(val_loader, model, linear_classifier, args, dist):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     top1 = AverageMeter('LinearAcc@1', ':6.2f')
@@ -259,12 +260,20 @@ def validate(val_loader, model, linear_classifier, args):
             if i % args.log_interval == 0:
                 progress.display(i)
 
-    print_str = f' * LinearAcc@1 {top1.avg:.3f} LinearAcc@5 {top5.avg:.3f}'
-    for k, v in avg_meters.items():
-        print_str += f' {k} {v.avg:.3f}'
-    print(print_str)
+    data = torch.FloatTensor([avg_meters['Loss'].avg, top1.avg, top5.avg] + [v.avg for v in avg_meters.values()])
+    data = data.cuda(args.gpu)
+    gather_list = [torch.zeros_like(data) for _ in range(dist.get_world_size())]
+    dist.all_gather(gather_list, data)
+    data = torch.stack(gather_list, dim=0).mean(0).cpu().numpy()
 
-    return avg_meters['Loss'].avg, top1.avg
+    if dist.get_rank() == 0:
+        print_str = f' * LinearAcc@1 {data[1]:.3f} LinearAcc@5 {data[2]:.3f}'
+        for i, (k, v) in enumerate(avg_meters.items()):
+            print_str += f' {k} {data[i+3]:.3f}'
+        print(print_str)
+
+    dist.barrier()
+    return data[0], data[1]
 
 
 def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar'):

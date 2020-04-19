@@ -129,17 +129,18 @@ class BlockGroup(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, block_fn, layers, width_multiplier, cifar_stem=False, use_batchnorm=True):
+    def __init__(self, block_fn, layers, width_multiplier, cifar_stem=False, use_batchnorm=True,
+                 input_channels=3):
         super().__init__()
 
         if cifar_stem:
             self.stem = nn.Sequential(
-                Conv2dFixedPad(3, 64 * width_multiplier, kernel_size=3, stride=1),
+                Conv2dFixedPad(input_channels, 64 * width_multiplier, kernel_size=3, stride=1),
                 BatchNormReLU(64 * width_multiplier, use_batchnorm=use_batchnorm)
             )
         else:
             self.stem = nn.Sequential(
-                Conv2dFixedPad(3, 64 * width_multiplier, kernel_size=7, stride=2),
+                Conv2dFixedPad(input_channels, 64 * width_multiplier, kernel_size=7, stride=2),
                 BatchNormReLU(64 * width_multiplier, use_batchnorm=use_batchnorm),
                 nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
             )
@@ -168,7 +169,7 @@ class ResNet(nn.Module):
         x = torch.mean(x, dim=[2, 3]).squeeze()
         return x
 
-def resnet_v1(resnet_depth, width_multiplier, cifar_stem=False, use_batchnorm=True):
+def resnet_v1(resnet_depth, width_multiplier, cifar_stem=False, use_batchnorm=True, input_channels=3):
     model_params = {
         18: {'block': ResidualBlock, 'layers': [2, 2, 2, 2]},
         34: {'block': ResidualBlock, 'layers': [3, 4, 6, 3]},
@@ -183,4 +184,4 @@ def resnet_v1(resnet_depth, width_multiplier, cifar_stem=False, use_batchnorm=Tr
 
     params = model_params[resnet_depth]
     return ResNet(params['block'], params['layers'], width_multiplier,
-                  cifar_stem=cifar_stem, use_batchnorm=use_batchnorm)
+                  cifar_stem=cifar_stem, use_batchnorm=use_batchnorm, input_channels=input_channels)

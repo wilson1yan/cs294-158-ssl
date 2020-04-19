@@ -49,7 +49,7 @@ def main():
         os.makedirs(args.output_dir)
 
     ngpus = torch.cuda.device_count()
-    mp.spawn(main_worker, nprocs=ngpus, args=(ngpus, args))
+    mp.spawn(main_worker, nprocs=ngpus, args=(ngpus, args), join=True)
 
 
 def main_worker(gpu, ngpus, args):
@@ -94,8 +94,8 @@ def main_worker(gpu, ngpus, args):
     args.gpu = gpu
 
     linear_classifier = model.construct_classifier().cuda(gpu)
-    linear_classifier = torch.nn.parallel.DistributedDataParallel(linear_classifier, device_ids=[gpu])
-    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
+    linear_classifier = torch.nn.parallel.DistributedDataParallel(linear_classifier, device_ids=[gpu], find_unused_parameters=True)
+    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[gpu], find_unused_parameters=True)
 
     if args.optimizer == 'sgd':
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum,
@@ -186,6 +186,7 @@ def train(train_loader, model, linear_classifier, optimizer,
             images = images.cuda(args.gpu, non_blocking=True)
         target = target.cuda(args.gpu, non_blocking=True)
         out, zs = model(images)
+        zs = zs.detach()
         for k, v in out.items():
             avg_meters[k].update(v.item(), bs)
 
@@ -195,7 +196,7 @@ def train(train_loader, model, linear_classifier, optimizer,
         optimizer.step()
 
         # compute gradient and optimizer step for classifier
-        logits = linear_classifier(zs.detach())
+        logits = linear_classifier(zs)
         loss = F.cross_entropy(logits, target)
 
         acc1, acc5 = accuracy(logits, target, topk=(1, 5))

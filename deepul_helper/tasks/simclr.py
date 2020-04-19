@@ -16,12 +16,12 @@ class SimCLR(nn.Module):
         self.projection_dim = 128
 
         if dataset == 'cifar10':
-            resnet = resnet_v1(18, 1, cifar_stem=True)
+            resnet = resnet_v1(50, 1, cifar_stem=True)
             resnet = SyncBatchNorm.convert_sync_batchnorm(resnet)
             self.features = resnet
-            self.latent_dim = 512
+            self.latent_dim = 2048
         elif 'imagenet' in dataset:
-            resnet = resnet_v1(50, 4, cifar_stem=False)
+            resnet = resnet_v1(50, 1, cifar_stem=False)
             resnet = nn.SyncBatchNorm.convert_sync_batchnorm(resnet)
             self.features = resnet
             self.latent_dim = 2048

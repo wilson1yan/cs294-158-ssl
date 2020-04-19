@@ -88,18 +88,18 @@ def get_transform(dataset, task, train=True):
         elif 'imagenet' in dataset:
             if train:
                 transform = transforms.Compose([
-                    transforms.RandomResizedCrop(224),
+                    transforms.RandomResizedCrop(128),
                     transforms.RandomHorizontalFlip(),
                     transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
                     transforms.RandomGrayscale(p=0.2),
-                    GaussianBlur(kernel_size=21),
+                    GaussianBlur(kernel_size=11),
                     transforms.ToTensor(),
                     transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
                 ])
             else:
                 transform = transforms.Compose([
-                    transforms.Resize(224),
-                    transforms.CenterCrop(224),
+                    transforms.Resize(128),
+                    transforms.CenterCrop(128),
                     transforms.ToTensor(),
                     transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
                 ])

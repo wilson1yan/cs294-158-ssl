@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.checkpoint import checkpoint
 
 from .batch_norm import BatchNorm1d, BatchNorm2d
 
@@ -109,10 +110,7 @@ class BlockGroup(nn.Module):
         super().__init__()
 
         self.start_block = block_fn(in_channels, filters, stride, use_projection=True)
-        if block_fn == BottleneckBlock:
-            in_channels = filters * 4
-        else:
-            in_channels = filters
+        in_channels = filters * 4 if block_fn == BottleneckBlock else filters
 
         self.blocks = []
         for _ in range(1, blocks):
@@ -142,13 +140,15 @@ class ResNet(nn.Module):
                 nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
             )
 
+        scalar = 4 if block_fn == BottleneckBlock else 1
+
         self.group1 = BlockGroup(64 * width_multiplier, 64 * width_multiplier,
                                  block_fn=block_fn, blocks=layers[0], stride=1)
-        self.group2 = BlockGroup(64 * width_multiplier, 128 * width_multiplier,
+        self.group2 = BlockGroup(64 * width_multiplier * scalar, 128 * width_multiplier,
                                  block_fn=block_fn, blocks=layers[1], stride=2)
-        self.group3 = BlockGroup(128 * width_multiplier, 256 * width_multiplier,
+        self.group3 = BlockGroup(128 * width_multiplier * scalar, 256 * width_multiplier,
                                  block_fn=block_fn, blocks=layers[2], stride=2)
-        self.group4 = BlockGroup(256 * width_multiplier, 512 * width_multiplier,
+        self.group4 = BlockGroup(256 * width_multiplier * scalar, 512 * width_multiplier,
                                  block_fn=block_fn, blocks=layers[3], stride=2)
 
     def forward(self, x):

@@ -1,8 +1,11 @@
+import math
 import numpy as np
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from deepul_helper.resnet import resnet_v1
 
 
 class CPC(nn.Module):
@@ -10,25 +13,36 @@ class CPC(nn.Module):
     metrics = ['Loss']
     metrics_fmt = [':.4e']
 
-    def __init__(self):
+    def __init__(self, dataset, n_classes):
         super().__init__()
         self.target_dim = 64
         self.emb_scale = 0.1
         self.steps_to_ignore = 2
         self.steps_to_predict = 3
 
-        self.encoder = ResNet18(1, use_batchnorm=False)
+        self.encoder = resnet_v1(18, 1, cifar_stem=False, use_batchnorm=False)
         self.pixelcnn = PixelCNN()
 
-        self.z2target = nn.Conv2d(1024, self.target_dim, (1, 1))
-        self.ctx2pred = nn.ModuleList([nn.Conv2d(1024, self.target_dim, (1, 1))
+        self.z2target = nn.Conv2d(512, self.target_dim, (1, 1))
+        self.ctx2pred = nn.ModuleList([nn.Conv2d(512, self.target_dim, (1, 1))
                                        for i in range(self.steps_to_ignore, self.steps_to_ignore + self.steps_to_predict)])
 
     def forward(self, images):
         batch_size = images.shape[0]
         patches = images_to_cpc_patches(images).detach() # (N*49, C, 64, 64)
+        rnd = np.random.randint(low=0, high=16, size=(batch_size * 49,))
+        for i in range(batch_size * 49):
+            r, c = i // 4, i % 4
+            patches[i, :, :r] = 0.
+            patches[i, :, :, :c] = 0.
+            patches[i, :, r + 60:] = 0.
+            patches[i, :, :, c + 60:] = 0.
+        
+        from torchvision.utils import save_image
+        save_image(patches[:100], 'patches.png', nrow=10)
+        1/0
 
-        latents = self.encoder(patches).mean(dim=[2, 3]) # (N*49, 1024)
+        latents = self.encoder(patches) # (N*49, 1024)
 
         latents = latents.view(batch_size, 7, 7, -1)
         context = self.pixelcnn(latents.permute(0, 3, 1, 2).contiguous()) # (N, 1024, 7, 7)
@@ -60,7 +74,7 @@ class CPC(nn.Module):
     def encode(self, images):
         batch_size = images.shape[0]
         patches = images_to_cpc_patches(images) # (N*49, C, 64, 64)
-        latents = self.encoder(patches).mean(dim=[2, 3]) # (N*49, 1024)
+        latents = self.encoder(patches) # (N*49, 1024)
         latents = latents.view(batch_size, 7, 7, -1) # (N, 7, 7, 1024)
         return latents.mean(dim=[1, 2])
 
@@ -71,7 +85,7 @@ class PixelCNN(nn.Module):
 
     def __init__(self):
         super().__init__()
-        latent_dim = 1024
+        latent_dim = 512
 
         self.net = nn.ModuleList()
         for _ in range(5):
@@ -94,3 +108,29 @@ class PixelCNN(nn.Module):
             if i < len(self.net) - 1:
                 x = F.relu(x)
         return x
+
+
+def images_to_cpc_patches(images):
+    """Converts (N, C, 256, 256) tensors to (N*49, C, 64, 64) patches
+       for CPC training"""
+    all_image_patches = []
+    for r in range(7):
+        for c in range(7):
+            batch_patch = images[:, :, r*32:r*32+64, c*32:c*32+64]
+            all_image_patches.append(batch_patch)
+    # (N, 49, C, 64, 64)
+    image_patches_tensor = torch.stack(all_image_patches, dim=1)
+    return image_patches_tensor.view(-1, *image_patches_tensor.shape[-3:])
+
+# def extract_image_patches(x, kernel, stride=1, dilation=1):
+#     # Do TF 'SAME' Padding
+#     b,c,h,w = x.shape
+#     h2 = math.ceil(h / stride)
+#     w2 = math.ceil(w / stride)
+#     pad_row = (h2 - 1) * stride + (kernel - 1) * dilation + 1 - h
+#     pad_col = (w2 - 1) * stride + (kernel - 1) * dilation + 1 - w
+#     x = F.pad(x, (pad_row//2, pad_row - pad_row//2, pad_col//2, pad_col - pad_col//2))
+#     # Extract patches
+#     patches = x.unfold(2, kernel, stride).unfold(3, kernel, stride)
+#     patches = patches.permute(0,4,5,1,2,3).contiguous()
+#     return patches.view(b,-1,patches.shape[-2], patches.shape[-1])

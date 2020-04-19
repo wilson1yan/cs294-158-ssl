@@ -7,12 +7,15 @@ from .batch_norm import BatchNorm1d, BatchNorm2d
 
 class BatchNormReLU(nn.Module):
 
-    def __init__(self, in_features, bn_cls=BatchNorm2d, relu=True, center=True, scale=True):
+    def __init__(self, in_features, bn_cls=BatchNorm2d, relu=True, center=True, scale=True, use_batchnorm=True):
         super().__init__()
         assert bn_cls in [BatchNorm1d, BatchNorm2d], 'Must use custom 1D or 2D BatchNorm'
 
         self.relu = relu
-        self.bn = bn_cls(in_features, center=center, scale=scale)
+        if use_batchnorm:
+            self.bn = bn_cls(in_features, center=center, scale=scale)
+        else:
+            self.bn = nn.Identity()
 
     def forward(self, x):
         x = self.bn(x)
@@ -48,17 +51,17 @@ class Conv2dFixedPad(nn.Module):
 
 class ResidualBlock(nn.Module):
 
-    def __init__(self, in_channels, filters, stride, use_projection=False):
+    def __init__(self, in_channels, filters, stride, use_projection=False, use_batchnorm=True):
         super().__init__()
         if use_projection:
             self.proj_conv = Conv2dFixedPad(in_channels, filters, kernel_size=1, stride=stride)
-            self.proj_bnr = BatchNormReLU(filters, relu=False)
+            self.proj_bnr = BatchNormReLU(filters, relu=False, use_batchnorm=use_batchnorm)
 
         self.conv1 = Conv2dFixedPad(in_channels, filters, kernel_size=3, stride=stride)
-        self.bnr1 = BatchNormReLU(filters)
+        self.bnr1 = BatchNormReLU(filters, use_batchnorm=use_batchnorm)
 
         self.conv2 = Conv2dFixedPad(filters, filters, kernel_size=3, stride=1)
-        self.bnr2 = BatchNormReLU(filters)
+        self.bnr2 = BatchNormReLU(filters, use_batchnorm=use_batchnorm)
 
         self.use_projection = use_projection
 
@@ -74,22 +77,22 @@ class ResidualBlock(nn.Module):
 
 class BottleneckBlock(nn.Module):
 
-    def __init__(self, in_channels, filters, stride, use_projection=False):
+    def __init__(self, in_channels, filters, stride, use_projection=False, use_batchnorm=True):
         super().__init__()
 
         if use_projection:
             filters_out = 4 * filters
             self.proj_conv = Conv2dFixedPad(in_channels, filters_out, kernel_size=1, stride=stride)
-            self.proj_bnr = BatchNormReLU(filters_out, relu=False)
+            self.proj_bnr = BatchNormReLU(filters_out, relu=False, use_batchnorm=use_batchnorm)
 
         self.conv1 = Conv2dFixedPad(in_channels, filters, kernel_size=1, stride=1)
-        self.bnr1 = BatchNormReLU(filters)
+        self.bnr1 = BatchNormReLU(filters, use_batchnorm=use_batchnorm)
 
         self.conv2 = Conv2dFixedPad(filters, filters, kernel_size=3, stride=stride)
-        self.bnr2 = BatchNormReLU(filters)
+        self.bnr2 = BatchNormReLU(filters, use_batchnorm=use_batchnorm)
 
         self.conv3 = Conv2dFixedPad(filters, 4 * filters, kernel_size=1, stride=1)
-        self.bnr3 = BatchNormReLU(4 * filters)
+        self.bnr3 = BatchNormReLU(4 * filters, use_batchnorm=use_batchnorm)
 
         self.use_projection = use_projection
 
@@ -106,15 +109,16 @@ class BottleneckBlock(nn.Module):
 
 class BlockGroup(nn.Module):
 
-    def __init__(self, in_channels, filters, block_fn, blocks, stride):
+    def __init__(self, in_channels, filters, block_fn, blocks, stride, use_batchnorm=True):
         super().__init__()
 
-        self.start_block = block_fn(in_channels, filters, stride, use_projection=True)
+        self.start_block = block_fn(in_channels, filters, stride,
+                                    use_projection=True, use_batchnorm=use_batchnorm)
         in_channels = filters * 4 if block_fn == BottleneckBlock else filters
 
         self.blocks = []
         for _ in range(1, blocks):
-            self.blocks.append(block_fn(in_channels, filters, 1))
+            self.blocks.append(block_fn(in_channels, filters, 1, use_batchnorm=use_batchnorm))
         self.blocks = nn.Sequential(*self.blocks)
 
     def forward(self, x):
@@ -125,31 +129,35 @@ class BlockGroup(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, block_fn, layers, width_multiplier, cifar_stem=False):
+    def __init__(self, block_fn, layers, width_multiplier, cifar_stem=False, use_batchnorm=True):
         super().__init__()
 
         if cifar_stem:
             self.stem = nn.Sequential(
                 Conv2dFixedPad(3, 64 * width_multiplier, kernel_size=3, stride=1),
-                BatchNormReLU(64 * width_multiplier)
+                BatchNormReLU(64 * width_multiplier, use_batchnorm=use_batchnorm)
             )
         else:
             self.stem = nn.Sequential(
                 Conv2dFixedPad(3, 64 * width_multiplier, kernel_size=7, stride=2),
-                BatchNormReLU(64 * width_multiplier),
+                BatchNormReLU(64 * width_multiplier, use_batchnorm=use_batchnorm),
                 nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
             )
 
         scalar = 4 if block_fn == BottleneckBlock else 1
 
         self.group1 = BlockGroup(64 * width_multiplier, 64 * width_multiplier,
-                                 block_fn=block_fn, blocks=layers[0], stride=1)
+                                 block_fn=block_fn, blocks=layers[0], stride=1,
+                                 use_batchnorm=use_batchnorm)
         self.group2 = BlockGroup(64 * width_multiplier * scalar, 128 * width_multiplier,
-                                 block_fn=block_fn, blocks=layers[1], stride=2)
+                                 block_fn=block_fn, blocks=layers[1], stride=2,
+                                 use_batchnorm=use_batchnorm)
         self.group3 = BlockGroup(128 * width_multiplier * scalar, 256 * width_multiplier,
-                                 block_fn=block_fn, blocks=layers[2], stride=2)
+                                 block_fn=block_fn, blocks=layers[2], stride=2,
+                                 use_batchnorm=use_batchnorm)
         self.group4 = BlockGroup(256 * width_multiplier * scalar, 512 * width_multiplier,
-                                 block_fn=block_fn, blocks=layers[3], stride=2)
+                                 block_fn=block_fn, blocks=layers[3], stride=2,
+                                 use_batchnorm=use_batchnorm)
 
     def forward(self, x):
         x = self.stem(x)
@@ -160,7 +168,7 @@ class ResNet(nn.Module):
         x = torch.mean(x, dim=[2, 3]).squeeze()
         return x
 
-def resnet_v1(resnet_depth, width_multiplier, cifar_stem=False):
+def resnet_v1(resnet_depth, width_multiplier, cifar_stem=False, use_batchnorm=True):
     model_params = {
         18: {'block': ResidualBlock, 'layers': [2, 2, 2, 2]},
         34: {'block': ResidualBlock, 'layers': [3, 4, 6, 3]},
@@ -174,4 +182,5 @@ def resnet_v1(resnet_depth, width_multiplier, cifar_stem=False):
         raise ValueERror('Not a valid resnet_depth:', resnet_depth)
 
     params = model_params[resnet_depth]
-    return ResNet(params['block'], params['layers'], width_multiplier, cifar_stem=cifar_stem)
+    return ResNet(params['block'], params['layers'], width_multiplier,
+                  cifar_stem=cifar_stem, use_batchnorm=use_batchnorm)

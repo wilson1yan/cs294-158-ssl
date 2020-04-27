@@ -19,18 +19,18 @@ class CPC(nn.Module):
         self.target_dim = 64
         self.emb_scale = 0.1
         self.steps_to_ignore = 2
-        self.steps_to_predict = 3
+        self.steps_to_predict = 1
         self.n_classes = n_classes
 
         self.encoder = resnet_v1(50, 1, cifar_stem=False, use_batchnorm=False, input_channels=1)
         self.pixelcnn = PixelCNN()
 
-        self.z2target = nn.Conv2d(2048, self.target_dim, (1, 1))
-        self.ctx2pred = nn.ModuleList([nn.Conv2d(2048, self.target_dim, (1, 1))
+        self.z2target = nn.Conv2d(self.latent_dim, self.target_dim, (1, 1))
+        self.ctx2pred = nn.ModuleList([nn.Conv2d(self.latent_dim, self.target_dim, (1, 1))
                                        for i in range(self.steps_to_ignore, self.steps_to_ignore + self.steps_to_predict)])
 
     def construct_classifier(self):
-        return nn.Sequential(BatchNorm1d(self.latent_dim, center=False), nn.Linear(self.latent_dim, self.n_classes))
+        return nn.Sequential(nn.Linear(self.latent_dim, self.n_classes))
 
     def forward(self, images):
         batch_size = images.shape[0]
@@ -62,6 +62,12 @@ class CPC(nn.Module):
             preds_i = preds_i.view(-1, self.target_dim) # (N*H*7, 64)
 
             logits = torch.matmul(preds_i, targets.t()) # (N*H*7, N*49)
+            np.save('logits.npy', logits.detach().cpu().numpy())
+            np.save('images.npy', images.detach().cpu().numpy())
+            np.save('patches.npy', patches.detach().cpu().numpy())
+            np.save('latents.npy', latents.detach().cpu().numpy())
+            np.save('context.npy', context.detach().cpu().numpy())
+            np.save('preds_i.npy', preds_i.detach().cpu().numpy())
 
             b = np.arange(total_elements) // (col_dim_i * row_dim)
             col = np.arange(total_elements) % (col_dim_i * row_dim)

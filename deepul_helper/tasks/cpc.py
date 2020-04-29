@@ -95,7 +95,7 @@ class PixelCNN(nn.Module):
         latent_dim = 2048
 
         self.net = nn.ModuleList()
-        for _ in range(5):
+        for _ in range(1):
             block = nn.Sequential(
                 nn.Conv2d(latent_dim, 256, (1, 1)),
                 nn.ReLU(),
@@ -112,8 +112,7 @@ class PixelCNN(nn.Module):
     def forward(self, x):
         for i, block in enumerate(self.net):
             x = block(x) + x
-            if i < len(self.net) - 1:
-                x = F.relu(x)
+            x = F.relu(x)
         return x
 
 

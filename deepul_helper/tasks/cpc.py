@@ -19,7 +19,7 @@ class CPC(nn.Module):
         self.target_dim = 64
         self.emb_scale = 0.1
         self.steps_to_ignore = 2
-        self.steps_to_predict = 1
+        self.steps_to_predict = 3
         self.n_classes = n_classes
 
         self.encoder = resnet_v1(50, 1, cifar_stem=False, use_batchnorm=False, input_channels=1)
@@ -89,7 +89,7 @@ class PixelCNN(nn.Module):
         latent_dim = 2048
 
         self.net = nn.ModuleList()
-        for _ in range(1):
+        for _ in range(5):
             block = nn.Sequential(
                 nn.Conv2d(latent_dim, 256, (1, 1)),
                 nn.ReLU(),

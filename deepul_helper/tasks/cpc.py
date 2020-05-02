@@ -49,7 +49,7 @@ class CPC(nn.Module):
         context = self.pixelcnn(latents) # (N, latent_dim, 7, 7)
 
         col_dim, row_dim = 7, 7
-        targets = self.z2target(latents).view(-1, self.target_dim) # (N*49, 64)
+        targets = self.z2target(latents).permute(0, 2, 3, 1).contiguous().view(-1, self.target_dim) # (N*49, 64)
 
         loss = 0.
         for i in range(self.steps_to_ignore, self.steps_to_ignore + self.steps_to_predict):

@@ -45,7 +45,7 @@ class CPC(nn.Module):
 
         latents = self.encoder(patches) # (N*49, latent_dim)
 
-        latents = latents.view(batch_size, 7, 7, -1).permute(0, 3, 1, 2).contiguous() # (N*49, latent_dim, 7, 7)
+        latents = latents.view(batch_size, 7, 7, -1).permute(0, 3, 1, 2).contiguous() # (N, latent_dim, 7, 7)
         context = self.pixelcnn(latents) # (N, latent_dim, 7, 7)
 
         col_dim, row_dim = 7, 7
@@ -62,12 +62,6 @@ class CPC(nn.Module):
             preds_i = preds_i.view(-1, self.target_dim) # (N*H*7, 64)
 
             logits = torch.matmul(preds_i, targets.t()) # (N*H*7, N*49)
-            np.save('logits.npy', logits.detach().cpu().numpy())
-            np.save('images.npy', images.detach().cpu().numpy())
-            np.save('patches.npy', patches.detach().cpu().numpy())
-            np.save('latents.npy', latents.detach().cpu().numpy())
-            np.save('context.npy', context.detach().cpu().numpy())
-            np.save('preds_i.npy', preds_i.detach().cpu().numpy())
 
             b = np.arange(total_elements) // (col_dim_i * row_dim)
             col = np.arange(total_elements) % (col_dim_i * row_dim)

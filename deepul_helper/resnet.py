@@ -8,7 +8,7 @@ from .layer_norm import LayerNorm
 
 class NormReLU(nn.Module):
 
-    def __init__(self, input_size, relu=True, center=True, scale=True, norm_type=norm_type):
+    def __init__(self, input_size, relu=True, center=True, scale=True, norm_type='bn'):
         super().__init__()
         assert len(input_size) == 1 or len(input_size) == 3, f'Input size must be 1D or 3D {len(input_size)}'
 
@@ -61,7 +61,7 @@ class ResidualBlock(nn.Module):
         C, H, W = input_size
         if use_projection:
             self.proj_conv = Conv2dFixedPad(C, filters, kernel_size=1, stride=stride)
-            self.proj_bnr = NormReLU((filters, H // stride, W // stride), 
+            self.proj_bnr = NormReLU((filters, H // stride, W // stride),
                                       relu=False, norm_type=norm_type)
 
         self.conv1 = Conv2dFixedPad(C, filters, kernel_size=3, stride=stride)
@@ -91,7 +91,7 @@ class BottleneckBlock(nn.Module):
         if use_projection:
             filters_out = 4 * filters
             self.proj_conv = Conv2dFixedPad(C, filters_out, kernel_size=1, stride=stride)
-            self.proj_bnr = NormReLU((filters_out, H // stride, W // stride), 
+            self.proj_bnr = NormReLU((filters_out, H // stride, W // stride),
                                      relu=False, norm_type=norm_type)
 
         self.conv1 = Conv2dFixedPad(C, filters, kernel_size=1, stride=1)
@@ -139,7 +139,7 @@ class BlockGroup(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, input_size, block_fn, layers, width_multiplier, cifar_stem=False, 
+    def __init__(self, input_size, block_fn, layers, width_multiplier, cifar_stem=False,
                  norm_type='bn'):
         super().__init__()
 
@@ -152,7 +152,7 @@ class ResNet(nn.Module):
         else:
             self.stem = nn.Sequential(
                 Conv2dFixedPad(C, 64 * width_multiplier, kernel_size=7, stride=2),
-                NormReLU((64 * width_multiplier, H, W), norm_type=norm_type),
+                NormReLU((64 * width_multiplier, H // 2, W // 2), norm_type=norm_type),
                 nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
             )
             H, W = H // 4, W // 4

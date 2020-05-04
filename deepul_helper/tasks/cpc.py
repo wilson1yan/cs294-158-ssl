@@ -22,7 +22,7 @@ class CPC(nn.Module):
         self.steps_to_predict = 3
         self.n_classes = n_classes
 
-        self.encoder = resnet_v1((3, 256, 256), 50, 1, cifar_stem=False, norm_type='ln')
+        self.encoder = resnet_v1((3, 64, 64), 50, 1, cifar_stem=False, norm_type='ln')
         self.pixelcnn = PixelCNN()
 
         self.z2target = nn.Conv2d(self.latent_dim, self.target_dim, (1, 1))
@@ -30,7 +30,7 @@ class CPC(nn.Module):
                                        for i in range(self.steps_to_ignore, self.steps_to_ignore + self.steps_to_predict)])
 
     def construct_classifier(self):
-        return nn.Sequential(nn.Linear(self.latent_dim, self.n_classes))
+        return nn.Sequential(BatchNorm1d(self.latent_dim, center=False), nn.Linear(self.latent_dim, self.n_classes))
 
     def forward(self, images):
         batch_size = images.shape[0]

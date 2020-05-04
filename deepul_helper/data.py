@@ -57,17 +57,17 @@ def get_transform(dataset, task, train=True):
             transform = transforms.Compose([
                 transforms.RandomResizedCrop(256),
                 transforms.RandomHorizontalFlip(),
-                transforms.Grayscale(),
+                transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+                transforms.RandomGrayscale(p=0.2),
                 transforms.ToTensor(),
-                transforms.Normalize((0.5,), (0.5,)),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
             ])
         else:
             transform = transforms.Compose([
                 transforms.Resize(300),
                 transforms.CenterCrop(256),
-                transforms.Grayscale(),
                 transforms.ToTensor(),
-                transforms.Normalize((0.5,), (0.5,)),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
             ])
     elif task == 'simclr':
         if dataset == 'cifar10':

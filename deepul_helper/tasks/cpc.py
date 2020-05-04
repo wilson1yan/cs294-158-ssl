@@ -22,7 +22,7 @@ class CPC(nn.Module):
         self.steps_to_predict = 1
         self.n_classes = n_classes
 
-        self.encoder = resnet_v1(50, 1, cifar_stem=False, use_batchnorm=False, input_channels=1)
+        self.encoder = resnet_v1((3, 256, 256), 50, 1, cifar_stem=False, norm_type='ln')
         self.pixelcnn = PixelCNN()
 
         self.z2target = nn.Conv2d(self.latent_dim, self.target_dim, (1, 1))

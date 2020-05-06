@@ -6,13 +6,14 @@ import torch.nn.functional as F
 from deepul_helper.resnet import NormReLU
 
 class SegmentationModel(nn.Module):
+    metrics = ['Loss']
+    metrics_fmt = [':.4e']
 
-    def __init__(self, n_classes, pretrained_model):
+    def __init__(self, n_classes):
         super().__init__()
 
         decoder_channels = (512, 256, 128, 64, 32)
         encoder_channels = (2048, 1024, 512, 256, 64) # Starting from head (resnet 50)
-        self.pretrained_model = pretrained_model
 
         # Construct decoder blocks
         in_channels = [encoder_channels[0]] + list(decoder_channels[:-1])
@@ -27,9 +28,7 @@ class SegmentationModel(nn.Module):
         # Segmentation head for output prediction
         self.seg_head = nn.Conv2d(decoder_channels[-1], n_classes, kernel_size=3, padding=1)
     
-    def forward(self, images):
-        with torch.no_grad():
-            features = self.pretrained_model.get_features(images)
+    def forward(self, features, targets):
         features = features[1:] # remove first skip with same spatial resolution
         features = features[::-1] # reverse channels to start from head of encoder
 
@@ -39,9 +38,10 @@ class SegmentationModel(nn.Module):
             skip = skips[i] if i < len(skips) else None
             x = decoder_block(x, skip)
         
-        x = self.seg_head(x)
+        logits = self.seg_head(x)
+        loss = F.cross_entropy(logits, targets)
 
-        return x
+        return dict(Loss=loss), logits
         
 
 class DecoderBlock(nn.Module):

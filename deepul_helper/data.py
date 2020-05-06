@@ -1,8 +1,10 @@
 import os.path as osp
+import random
 
 import numpy as np
 import cv2
 
+import torch.nn.functional as F
 from torchvision import datasets
 from torchvision import transforms
 
@@ -104,6 +106,25 @@ def get_transform(dataset, task, train=True):
                     transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
                 ])
         transform = SimCLRDataTransform(transform)
+    elif task == 'segmentation':
+        if train:
+            transform = MultipleCompose([
+                MultipleRandomResizedCrop(128),
+                MultipleRandomHorizontalFlip(),
+                RepeatTransform(transforms.ToTensor()),
+                GroupTransform([
+                    transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                    lambda x: x])
+            ])
+        else:
+            transform = MultipleCompose([
+                RepeatTransform(transforms.Resize(128)),
+                RepeatTransform(transforms.CenterCrop(128)),
+                RepeatTransform(transforms.ToTensor()),
+                GroupTransform([
+                    transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                    lambda x: x])
+            ])
     else:
         raise Exception('Invalid task:', task)
 
@@ -132,6 +153,14 @@ def get_datasets(dataset, task):
         test_dset = datasets.CIFAR10(osp.join('data', dataset), train=False,
                                      transform=get_transform(dataset, task, train=False),
                                      download=True)
+        return train_dset, test_dset, len(train_dset.classes)
+    elif dataset == 'pascalvoc2012':
+        train_dset = datasets.VOCSegmentation(osp.join('data', dataset), image_set='train',
+                                              transforms=get_transform(dataset, task, train=True),
+                                              download=True)
+        test_dset = datasets.VOCSegmentation(osp.join('data', dataset), image_set='test',
+                                             transforms=get_transform(dataset, task, train=False),
+                                             download=True)
         return train_dset, test_dset, len(train_dset.classes)
     else:
         raise Exception('Invalid dataset:', dataset)
@@ -167,3 +196,53 @@ class SimCLRDataTransform(object):
         xi = self.transform(sample)
         xj = self.transform(sample)
         return xi, xj
+
+# Re-written torchvision transforms to support operations on multiple inputs
+# Needed to maintain consistency on random transforms with real images and their segmentations
+class MultipleCompose(object):
+    def __init__(self, transforms):
+        self.transforms = transforms
+    
+    def __call__(self, *inputs):
+        for t in self.transforms:
+            inputs = t(*inputs)
+        return inputs
+
+
+class GroupTransform(object):
+    """ Applies a list of transforms elementwise """
+    def __init__(self, transforms):
+        self.transforms = transforms
+    
+    def __call__(self, *inputs):
+        assert len(inputs) == len(self.transforms)
+        outputs = [t(inp) for t, inp in zip(self.transforms, inputs)]
+        return outputs
+
+class MultipleRandomResizedCrop(transforms.RandomResizedCrop):
+
+    def __call__(self, *imgs):
+        """
+        Args:
+            imgs (List of PIL Image): Images to be cropped and resized. 
+                                      Assumes they are all the same size
+
+        Returns:
+            PIL Images: Randomly cropped and resized images.
+        """
+        i, j, h, w = self.get_params(imgs[0], self.scale, self.ratio)
+        return [F.resized_crop(img, i, j, h, w, self.size, self.interpolation)
+                for img in imgs]
+
+class MultipleRandomHorizontalFlip(transforms.RandomHorizontalFlip):
+    def __call__(self, *imgs):
+        if random.random() < self.p:
+            return [F.hflip(img) for img in imgs]
+        return imgs
+
+class RepeatTransform(object):
+    def __init__(self, transform):
+        self.transform = transform
+
+    def __call__(self, *inputs):
+        return [self.transform(inp) for inp in inputs]

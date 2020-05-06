@@ -183,6 +183,27 @@ class ResNet(nn.Module):
         x = torch.mean(x, dim=[2, 3]).squeeze()
         return x
 
+    # For semantic segmentation architectures
+    def get_features(self, x):
+        features = [x]
+
+        x = self.stem[1](self.stem[0](x))
+        features.append(x)
+
+        x = self.group1(self.stem[2](x))
+        features.append(x)
+
+        x = self.group2(x)
+        features.append(x)
+
+        x = self.group3(x)
+        features.append(x)
+
+        x = self.group4(x)
+        features.append(x)
+
+        return features
+
 def resnet_v1(input_size, resnet_depth, width_multiplier, cifar_stem=False, norm_type='bn'):
     model_params = {
         18: {'block': ResidualBlock, 'layers': [2, 2, 2, 2]},

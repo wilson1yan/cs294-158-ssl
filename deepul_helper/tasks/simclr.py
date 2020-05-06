@@ -18,12 +18,10 @@ class SimCLR(nn.Module):
         if dataset == 'cifar10':
             resnet = resnet_v1((3, 32, 32), 50, 1, cifar_stem=True)
             resnet = SyncBatchNorm.convert_sync_batchnorm(resnet)
-            self.features = resnet
             self.latent_dim = 2048
         elif 'imagenet' in dataset:
             resnet = resnet_v1((3, 128, 128), 50, 1, cifar_stem=False)
             resnet = nn.SyncBatchNorm.convert_sync_batchnorm(resnet)
-            self.features = resnet
             self.latent_dim = 2048
 
         self.proj = nn.Sequential(
@@ -77,5 +75,8 @@ class SimCLR(nn.Module):
         return dict(Loss=loss), hi
 
     def encode(self, images):
-        return self.features(images)
+        return self.resnet(images)
+
+    def get_features(self, images):
+        return self.resnet.get_features(images)
 

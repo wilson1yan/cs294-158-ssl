@@ -4,7 +4,7 @@ import random
 import numpy as np
 import cv2
 
-import torch.nn.functional as F
+import torchvision.transforms.functional as F
 from torchvision import datasets
 from torchvision import transforms
 
@@ -158,10 +158,10 @@ def get_datasets(dataset, task):
         train_dset = datasets.VOCSegmentation(osp.join('data', dataset), image_set='train',
                                               transforms=get_transform(dataset, task, train=True),
                                               download=True)
-        test_dset = datasets.VOCSegmentation(osp.join('data', dataset), image_set='test',
+        test_dset = datasets.VOCSegmentation(osp.join('data', dataset), image_set='val',
                                              transforms=get_transform(dataset, task, train=False),
                                              download=True)
-        return train_dset, test_dset, len(train_dset.classes)
+        return train_dset, test_dset, None
     else:
         raise Exception('Invalid dataset:', dataset)
 
@@ -202,7 +202,7 @@ class SimCLRDataTransform(object):
 class MultipleCompose(object):
     def __init__(self, transforms):
         self.transforms = transforms
-    
+
     def __call__(self, *inputs):
         for t in self.transforms:
             inputs = t(*inputs)
@@ -213,7 +213,7 @@ class GroupTransform(object):
     """ Applies a list of transforms elementwise """
     def __init__(self, transforms):
         self.transforms = transforms
-    
+
     def __call__(self, *inputs):
         assert len(inputs) == len(self.transforms)
         outputs = [t(inp) for t, inp in zip(self.transforms, inputs)]
@@ -224,7 +224,7 @@ class MultipleRandomResizedCrop(transforms.RandomResizedCrop):
     def __call__(self, *imgs):
         """
         Args:
-            imgs (List of PIL Image): Images to be cropped and resized. 
+            imgs (List of PIL Image): Images to be cropped and resized.
                                       Assumes they are all the same size
 
         Returns:

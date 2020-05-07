@@ -13,7 +13,6 @@ from torchvision.utils import save_image
 
 from deepul_helper.utils import AverageMeter, ProgressMeter, remove_module_state_dict, seg_idxs_to_color
 from deepul_helper.data import get_datasets
-from deepul_helper.lars import LARS
 from deepul_helper.seg_model import SegmentationModel
 from deepul_helper.tasks import *
 
@@ -27,12 +26,13 @@ parser.add_argument('-t', '--pretrained_dir', type=str, default='results/imagene
 
 # Training parameters
 parser.add_argument('-b', '--batch_size', type=int, default=128, help='default: 128')
-parser.add_argument('-e', '--epochs', type=int, default=200, help='default: 200')
-parser.add_argument('-o', '--optimizer', type=str, default='adam', help='sgd|lars|adam (default: adam)')
+parser.add_argument('-e', '--epochs', type=int, default=500, help='default: 200')
+parser.add_argument('-o', '--optimizer', type=str, default='adam', help='sgd|adam (default: adam)')
 parser.add_argument('--lr', type=float, default=1e-3, help='default: 1e-3')
 parser.add_argument('-m', '--momentum', type=float, default=0.9, help='default: 0.9')
 parser.add_argument('-w', '--weight_decay', type=float, default=5e-4, help='default: 5e-4')
 parser.add_argument('-i', '--log_interval', type=int, default=10, help='default: 10')
+parser.add_argument('-f', '--fine_tuning', action='store_true', help='fine-tune the pretrained model')
 
 best_loss = float('inf')
 
@@ -62,8 +62,9 @@ def main():
     ckpt = torch.load(osp.join(args.pretrained_dir, 'model_best.pth.tar'), map_location='cpu')
     state_dict = remove_module_state_dict(ckpt['state_dict'])
     pretrained_model.load_state_dict(state_dict)
-    pretrained_model = pretrained_model.cuda()
-    pretrained_model.eval()
+    pretrained_model.cuda()
+    if not args.fine_tuning:
+        pretrained_model.eval()
     print(f"Loaded pretrained model at Epoch {ckpt['epoch']} Acc {ckpt['best_acc']:.2f}")
 
     model = SegmentationModel(n_classes)
@@ -74,15 +75,15 @@ def main():
     torch.backends.cudnn.benchmark = True
     model.cuda()
 
+    params = list(model.parameters())
+    if args.fine_tuning:
+        params += list(pretrained_model.parameters())
     if args.optimizer == 'sgd':
-        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum,
+        optimizer = torch.optim.SGD(params, lr=args.lr, momentum=args.momentum,
                                     weight_decay=args.weight_decay, nesterov=True)
     elif args.optimizer == 'adam':
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(args.momentum, 0.999),
+        optimizer = torch.optim.Adam(params, lr=args.lr, betas=(args.momentum, 0.999),
                                      weight_decay=args.weight_decay)
-    elif args.optimizer == 'lars':
-        optimizer = LARS(model.parameters(), lr=args.lr, momentum=args.momentum,
-                         weight_decay=args.weight_decay)
     else:
         raise Exception('Unsupported optimizer', args.optimizer)
 
@@ -101,6 +102,7 @@ def main():
             'state_dict': model.state_dict(),
             'optimizer': optimizer.state_dict(),
             'scheduler': scheduler.state_dict(),
+            'pt_state_dict': pretrained_model.state_dict(),
             'best_loss': best_loss,
             'best_acc': val_acc,
             'best_miou': val_miou
@@ -147,6 +149,8 @@ def train(train_loader, pretrained_model, model, optimizer, epoch, args):
 
     # switch to train mode
     model.train()
+    if args.fine_tuning:
+        pretrained_model.train()
 
     end = time.time()
     for i, (images, target) in enumerate(train_loader):
@@ -158,8 +162,9 @@ def train(train_loader, pretrained_model, model, optimizer, epoch, args):
         images = images.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True).squeeze(1).long()
 
-        with torch.no_grad():
-            features = pretrained_model.get_features(images)
+        features = pretrained_model.get_features(images)
+        if not args.fine_tuning:
+            features = [f.detach() for f in features]
 
         out, logits = model(features, target)
         for k, v in out.items():
@@ -199,6 +204,7 @@ def validate(val_loader, pretrained_model, model, args, dist):
 
     # switch to evaluate mode
     model.eval()
+    pretrained_model.eval()
 
     with torch.no_grad():
         end = time.time()
@@ -264,11 +270,12 @@ def compute_mIOU(logits, target):
     n_classes = logits.shape[1]
     pred = torch.argmax(logits, dim=1)
 
+    # Ignore background class 0
     intersection = pred * (pred == target)
-    area_intersection = torch.histc(intersection, bins=n_classes, min=0, max=n_classes-1)
+    area_intersection = torch.histc(intersection, bins=n_classes - 1, min=1, max=n_classes-1)
 
-    area_pred = torch.histc(pred, bins=n_classes, min=0, max=n_classes - 1)
-    area_target = torch.histc(target, bins=n_classes, min=0, max=n_classes - 1)
+    area_pred = torch.histc(pred, bins=n_classes - 1, min=1, max=n_classes - 1)
+    area_target = torch.histc(target, bins=n_classes - 1, min=1, max=n_classes - 1)
     area_union = area_pred + area_target - area_intersection
 
     return torch.mean(area_intersection / (area_union + 1e-10)) * 100.

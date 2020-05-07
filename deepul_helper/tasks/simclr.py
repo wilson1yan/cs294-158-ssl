@@ -10,7 +10,7 @@ class SimCLR(nn.Module):
     metrics = ['Loss']
     metrics_fmt = [':.4e']
 
-    def __init__(self, dataset, n_classes, dist):
+    def __init__(self, dataset, n_classes, dist=None):
         super().__init__()
         self.temperature = 0.5
         self.projection_dim = 128
@@ -18,10 +18,13 @@ class SimCLR(nn.Module):
         if dataset == 'cifar10':
             resnet = resnet_v1((3, 32, 32), 50, 1, cifar_stem=True)
             resnet = SyncBatchNorm.convert_sync_batchnorm(resnet)
+            self.resnet = resnet
             self.latent_dim = 2048
         elif 'imagenet' in dataset:
             resnet = resnet_v1((3, 128, 128), 50, 1, cifar_stem=False)
-            resnet = nn.SyncBatchNorm.convert_sync_batchnorm(resnet)
+            if dist is not None:
+                resnet = nn.SyncBatchNorm.convert_sync_batchnorm(resnet)
+            self.resnet = resnet
             self.latent_dim = 2048
 
         self.proj = nn.Sequential(
@@ -49,11 +52,15 @@ class SimCLR(nn.Module):
         # Each training example has 2N - 2 negative samples
         # 2N total samples, but exclude the current and positive sample
 
-        zis = [torch.zeros_like(zi) for _ in range(self.dist.get_world_size())]
-        zjs = [torch.zeros_like(zj) for _ in range(self.dist.get_world_size())]
+        if self.dist is None:
+            zis = [zi]
+            zjs = [zj]
+        else:
+            zis = [torch.zeros_like(zi) for _ in range(self.dist.get_world_size())]
+            zjs = [torch.zeros_like(zj) for _ in range(self.dist.get_world_size())]
 
-        self.dist.all_gather(zis, zi)
-        self.dist.all_gather(zjs, zj)
+            self.dist.all_gather(zis, zi)
+            self.dist.all_gather(zjs, zj)
 
         z1 = torch.cat((zi, zj), dim=0) # (2N, projection_dim)
         z2 = torch.cat(zis + zjs, dim=0) # (2N * n_gpus, projection_dim)
@@ -61,8 +68,8 @@ class SimCLR(nn.Module):
         sim_matrix = torch.mm(z1, z2.t()) # (2N, 2N * n_gpus)
         sim_matrix = sim_matrix / self.temperature
         # Mask out same-sample terms
-        n_gpus = self.dist.get_world_size()
-        rank = self.dist.get_rank()
+        n_gpus = 1 if self.dist is None else self.dist.get_world_size()
+        rank = 0 if self.dist is None else self.dist.get_rank()
         sim_matrix[torch.arange(n), torch.arange(rank*n, (rank+1)*n)]  = -float('inf')
         sim_matrix[torch.arange(n, 2*n), torch.arange((n_gpus+rank)*n, (n_gpus+rank+1)*n)] = -float('inf')
 

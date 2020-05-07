@@ -11,7 +11,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.optim.lr_scheduler as lr_scheduler
 
-from deepul_helper.utils import AverageMeter, ProgressMeter
+from deepul_helper.utils import AverageMeter, ProgressMeter, remove_module_state_dict
 from deepul_helper.data import get_datasets
 from deepul_helper.lars import LARS
 from deepul_helper.seg_model import SegmentationModel
@@ -57,7 +57,7 @@ def main_worker(gpu, ngpus, args):
     total_batch_size = args.batch_size
     args.batch_size = args.batch_size // ngpus
 
-    train_dataset, val_dataset, n_classes = get_datasets(args.dataset, args.task)
+    train_dataset, val_dataset, n_classes = get_datasets(args.dataset, 'segmentation')
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, num_workers=16,
@@ -72,8 +72,11 @@ def main_worker(gpu, ngpus, args):
 
     # Currently only supports using SimCLR
     pretrained_model = SimCLR('imagenet100', 100, dist)
-    ckpt = torch.load(args.pretrained_dir, map_location='cpu')
-    pretrained_model.load_state_dict(ckpt['state_dict'])
+    ckpt = torch.load(osp.join(args.pretrained_dir, 'model_best.pth.tar'), map_location='cpu')
+    state_dict = remove_module_state_dict(ckpt['state_dict'])
+    pretrained_model.load_state_dict(state_dict)
+    pretrained_model = pretrained_model.cuda(gpu)
+    pretrained_model.eval()
     print(f"Loaded pretrained model at Epoch {ckpt['epoch']} Acc {ckpt['best_acc']:.2f}")
 
     model = SegmentationModel(n_classes)
@@ -165,7 +168,7 @@ def train(train_loader, pretrained_model, model, optimizer, epoch, args):
         out['Loss'].backward()
         optimizer.step()
 
-        miou.update(compute_mIOU(logits, target), bs) 
+        miou.update(compute_mIOU(logits, target), bs)
         acc1, acc3 = accuracy(logits, target, topk=(1, 3))
         top1.update(acc1[0], bs)
         top3.update(acc3[0], bs)
@@ -208,7 +211,7 @@ def validate(val_loader, pretrained_model, model, args, dist):
             for k, v in out.items():
                 avg_meters[k].update(v.item(), bs)
 
-            miou.update(compute_mIOU(logits, target), bs) 
+            miou.update(compute_mIOU(logits, target), bs)
             acc1, acc3 = accuracy(logits, target, topk=(1, 3))
             top1.update(acc1[0], bs)
             top3.update(acc3[0], bs)
@@ -276,7 +279,7 @@ def compute_mIOU(logits, target):
     area_union = area_pred + area_target - area_intersection
 
     return torch.mean(area_intersection / (area_union + 1e-10)) * 100.
-        
+
 
 if __name__ == '__main__':
     main()

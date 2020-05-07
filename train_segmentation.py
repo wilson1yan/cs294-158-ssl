@@ -10,8 +10,9 @@ import torch.nn.functional as F
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.optim.lr_scheduler as lr_scheduler
+from torchvision.utils import save_image
 
-from deepul_helper.utils import AverageMeter, ProgressMeter, remove_module_state_dict
+from deepul_helper.utils import AverageMeter, ProgressMeter, remove_module_state_dict, seg_idxs_to_color
 from deepul_helper.data import get_datasets
 from deepul_helper.lars import LARS
 from deepul_helper.seg_model import SegmentationModel
@@ -43,6 +44,10 @@ best_map = 0.0
 def main():
     args = parser.parse_args()
     assert osp.exists(args.pretrained_dir)
+
+    args.seg_dir = osp.join(args.pretrained_dir, 'segmentation')
+    if not osp.exists(args.seg_dir):
+        os.makedirs(args.seg_dir)
 
     ngpus = torch.cuda.device_count()
     mp.spawn(main_worker, nprocs=ngpus, args=(ngpus, args), join=True)
@@ -128,6 +133,29 @@ def main_worker(gpu, ngpus, args):
                 'best_miou': val_miou
             }, is_best, args)
 
+            # Save segmentation samples to visualize
+            with torch.no_grad():
+                images, target = next(iter(val_loader))
+                images, target = images[:33], target[:33]
+                images = images.cuda(args.gpu, non_blocking=True)
+                target = target.cuda(args.gpu, non_blocking=True).squeeze(1)
+                features = pretrained_model.get_features(images)
+                _, logits = model(features, target)
+                pred = torch.argmax(logits, dim=1)
+
+                target = seg_idxs_to_color(target.cpu())
+                pred = seg_idxs_to_color(pred.cpu())
+                images = unnormalize(images.cpu())
+
+                to_save = torch.stack((images, target, pred), dim=1).flatten(end_dim=1)
+                save_image(to_save, osp.join(args.seg_dir, f'epoch{epoch}', nrow=10, pad_value=1.))
+
+
+def unnormalize(images):
+    mu = torch.FloatTensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
+    stddev = torch.FloatTensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
+    return images * stddev + mu
+
 
 def train(train_loader, pretrained_model, model, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
@@ -154,7 +182,7 @@ def train(train_loader, pretrained_model, model, optimizer, epoch, args):
         # compute loss
         bs = images.shape[0]
         images = images.cuda(args.gpu, non_blocking=True)
-        target = target.cuda(args.gpu, non_blocking=True)
+        target = target.cuda(args.gpu, non_blocking=True).squeeze(1)
 
         with torch.no_grad():
             features = pretrained_model.get_features(images)
@@ -204,7 +232,7 @@ def validate(val_loader, pretrained_model, model, args, dist):
             # compute and measure loss
             bs = images.shape[0]
             images = images.cuda(args.gpu, non_blocking=True)
-            target = target.cuda(args.gpu, non_blocking=True)
+            target = target.cuda(args.gpu, non_blocking=True).squeeze(1)
 
             features = pretrained_model.get_features(images)
             out, logits = model(features, target)

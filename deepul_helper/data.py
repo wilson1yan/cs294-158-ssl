@@ -161,7 +161,7 @@ def get_datasets(dataset, task):
         test_dset = datasets.VOCSegmentation(osp.join('data', dataset), image_set='val',
                                              transforms=get_transform(dataset, task, train=False),
                                              download=True)
-        return train_dset, test_dset, None
+        return train_dset, test_dset, 21
     else:
         raise Exception('Invalid dataset:', dataset)
 

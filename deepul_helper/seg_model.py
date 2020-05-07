@@ -24,25 +24,25 @@ class SegmentationModel(nn.Module):
             for in_ch, skip_ch, out_ch in zip(in_channels, skip_channels, out_channels)
         ]
         self.dec_blocks = nn.ModuleList(blocks)
-        
+
         # Segmentation head for output prediction
         self.seg_head = nn.Conv2d(decoder_channels[-1], n_classes, kernel_size=3, padding=1)
-    
+
     def forward(self, features, targets):
         features = features[1:] # remove first skip with same spatial resolution
         features = features[::-1] # reverse channels to start from head of encoder
 
         skips = features[1:]
         x = features[0]
-        for i, decoder_block in enumerate(self.decoder_blocks):
+        for i, decoder_block in enumerate(self.dec_blocks):
             skip = skips[i] if i < len(skips) else None
             x = decoder_block(x, skip)
-        
+
         logits = self.seg_head(x)
         loss = F.cross_entropy(logits, targets)
 
         return dict(Loss=loss), logits
-        
+
 
 class DecoderBlock(nn.Module):
     def __init__(

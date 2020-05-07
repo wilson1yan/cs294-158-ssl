@@ -1,5 +1,6 @@
 import requests
 import math
+import pickle
 from collections import OrderedDict, Counter
 import torch
 import torch.nn.functional as F
@@ -21,6 +22,16 @@ def remove_module_state_dict(state_dict):
         name = k[7:]
         new_state_dict[name] = v
     return new_state_dict
+
+
+def seg_idxs_to_color(segs, palette_fname='palette.pkl'):
+    B, H, W = segs.shape
+
+    with open(palette_fname, 'rb') as f:
+        palette = pickle.load(f)
+    palette = torch.FloatTensor(palette).view(256, 3)
+    imgs = torch.index_select(palette, 0, segs.view(-1)).view(B, H, W, 3).permute(0, 3, 1, 2) / 255.
+    return imgs
 
 
 class AverageMeter(object):

@@ -3,7 +3,6 @@ import os
 import os.path as osp
 import time
 import shutil
-from warmup_scheduler import GradualWarmupScheduler
 
 import torch
 import torch.nn as nn
@@ -166,8 +165,7 @@ def train(train_loader, pretrained_model, model, optimizer, epoch, args):
         out['Loss'].backward()
         optimizer.step()
 
-        # TODO compute pixel accuracy and mIOU
-
+        miou.update(compute_mIOU(logits, target), bs) 
         acc1, acc3 = accuracy(logits, target, topk=(1, 3))
         top1.update(acc1[0], bs)
         top3.update(acc3[0], bs)
@@ -210,8 +208,7 @@ def validate(val_loader, pretrained_model, model, args, dist):
             for k, v in out.items():
                 avg_meters[k].update(v.item(), bs)
 
-            
-
+            miou.update(compute_mIOU(logits, target), bs) 
             acc1, acc3 = accuracy(logits, target, topk=(1, 3))
             top1.update(acc1[0], bs)
             top3.update(acc3[0], bs)
@@ -267,7 +264,19 @@ def accuracy(logits, target, topk=(1,)):
         return res
 
 def compute_mIOU(logits, target):
+    # Assumes logits (B, n_classes, H, W), target (B, H, W)
+    n_classes = logits.shape[1]
+    pred = torch.argmax(logits, dim=1)
 
+    intersection = pred * (pred == target)
+    area_intersection = torch.histc(intersection, bins=n_classes, min=0, max=n_classes-1)
+
+    area_pred = torch.histc(pred, bins=n_classes, min=0, max=n_classes - 1)
+    area_target = torch.histc(target, bins=n_classes, min=0, max=n_classes - 1)
+    area_union = area_pred + area_target - area_intersection
+
+    return torch.mean(area_intersection / (area_union + 1e-10)) * 100.
+        
 
 if __name__ == '__main__':
     main()

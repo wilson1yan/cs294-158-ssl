@@ -123,7 +123,7 @@ def get_transform(dataset, task, train=True):
                 RepeatTransform(transforms.ToTensor()),
                 GroupTransform([
                     transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-                    lambda x: x])
+                    SegTargetTransform()])
             ])
     else:
         raise Exception('Invalid task:', task)
@@ -246,3 +246,9 @@ class RepeatTransform(object):
 
     def __call__(self, *inputs):
         return [self.transform(inp) for inp in inputs]
+
+class SegTargetTransform(object):
+    def __call__(self, target):
+        target *= 255.
+        target[target > 20] = 0
+        return target.long()

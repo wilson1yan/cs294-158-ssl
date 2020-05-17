@@ -25,10 +25,10 @@ parser.add_argument('-t', '--pretrained_dir', type=str, default='results/imagene
                      help='directory of the pretrained model (default: results/imagenet100_simclr)')
 
 # Training parameters
-parser.add_argument('-b', '--batch_size', type=int, default=128, help='default: 128')
-parser.add_argument('-e', '--epochs', type=int, default=500, help='default: 200')
+parser.add_argument('-b', '--batch_size', type=int, default=16, help='default: 128')
+parser.add_argument('-e', '--epochs', type=int, default=1000, help='default: 200')
 parser.add_argument('-o', '--optimizer', type=str, default='adam', help='sgd|adam (default: adam)')
-parser.add_argument('--lr', type=float, default=1e-3, help='default: 1e-3')
+parser.add_argument('--lr', type=float, default=1e-4, help='default: 1e-3')
 parser.add_argument('-m', '--momentum', type=float, default=0.9, help='default: 0.9')
 parser.add_argument('-w', '--weight_decay', type=float, default=5e-4, help='default: 5e-4')
 parser.add_argument('-i', '--log_interval', type=int, default=10, help='default: 10')

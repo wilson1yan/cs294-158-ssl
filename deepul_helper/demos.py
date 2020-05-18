@@ -113,7 +113,6 @@ def display_nearest_neighbors(task, model, loader, n_examples=4, k=10):
             print(f'Image {i + 1}')
             plt.figure()
             plt.imshow(ref_images[i])
-            plt.savefig(f'img_{i}.png')
 
             grid_img = make_grid(sel_images[i], nrow=10)
             grid_img = (grid_img.permute(1, 2, 0) * 255.).numpy().astype('uint8')
@@ -121,7 +120,6 @@ def display_nearest_neighbors(task, model, loader, n_examples=4, k=10):
             print(f'Top {k} Nearest Neighbors (in latent space)')
             plt.figure()
             plt.imshow(grid_img)
-            plt.save_fig(f'nn_{i}.png')
 
 
 def images_to_cuda(images):
@@ -132,6 +130,24 @@ def images_to_cuda(images):
     return images
 
 
-model, linear_classifier, train_loader, test_loader = load_model_and_data('simclr')
-evaluate_accuracy(model, linear_classifier, train_loader, test_loader)
-display_nearest_neighbors('simclr', model, test_loader)
+def show_context_encoder_inpainting():
+    model, _, _, test_loader = load_model_and_data('context_encoder')
+    images = next(iter(test_loader))[:8]
+    with torch.no_grad():
+        images = images.cuda(non_blocking=True)
+        images_masked, images_recon = model.reconstruct(images)
+        images_masked = unnormalize('cifar10')
+        images_recon = unnormalize('cifar10')
+
+        images = torch.stack((images_masked, images_recon), dim=1).flatten(dim=1).cpu()
+
+        grid_img = make_grid(images, nrow=4)
+        grid_img = (grid_img.permute(1, 2, 0) * 255.).numpy().astype('uint8')
+
+        plt.figure()
+        plt.imshow(grid_img)
+        plt.imsave('ce.png')
+
+
+if __name__ == '__main__':
+    show_context_encoder_inpainting()

@@ -1,5 +1,8 @@
 import os.path as osp
+from tqdm import tqdm
 
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import torch
@@ -9,7 +12,7 @@ from torchvision.utils import make_grid
 
 from deepul_helper.data import get_datasets
 from deepul_helper.tasks import *
-from deepul_helper.utils import accuracy, unnormalize
+from deepul_helper.utils import accuracy, unnormalize, remove_module_state_dict
 
 
 def load_model_and_data(task):
@@ -28,13 +31,13 @@ def load_model_and_data(task):
         model = RotationPrediction('cifar10', n_classes)
     elif task == 'simclr':
         model = SimCLR('cifar10', n_classes, None)
-    model.load_state_dict(ckpt['state_dict'])
+    model.load_state_dict(remove_module_state_dict(ckpt['state_dict']))
 
     model.cuda()
     model.eval()
 
     linear_classifier = model.construct_classifier()
-    linear_classifier.load_state_dict(ckpt['state_dict_linear'])
+    linear_classifier.load_state_dict(remove_module_state_dict(ckpt['state_dict_linear']))
 
     linear_classifier.cuda()
     linear_classifier.eval()
@@ -55,6 +58,7 @@ def evaluate_accuracy(model, linear_classifier, train_loader, test_loader):
 def evaluate_classifier(model, linear_classifier, loader):
     correct1, correct5 = 0, 0
     with torch.no_grad():
+        pbar = tqdm(total=len(loader.dataset))
         for images, target in loader:
             images = images_to_cuda(images)
             target = target.cuda(non_blocking=True)
@@ -63,26 +67,31 @@ def evaluate_classifier(model, linear_classifier, loader):
             logits = linear_classifier(zs)
             acc1, acc5 = accuracy(logits, target, topk=(1, 5))
 
-            correct1 += acc1.item() * bs
-            correct5 += acc5.item() * bs
+            correct1 += acc1.item() * logits.shape[0]
+            correct5 += acc5.item() * logits.shape[0]
+
+            pbar.update(logits.shape[0])
+        pbar.close()
     total = len(loader.dataset)
 
     return correct1 / total, correct5 / total
 
 
-def display_nearest_neighbors(model, loader, n_examples=4, k=10):
+def display_nearest_neighbors(task, model, loader, n_examples=4, k=10):
     with torch.no_grad():
         all_images, all_zs = [], []
-        for i, (images, _) in loader:
+        for i, (images, _) in enumerate(loader):
             images = images_to_cuda(images)
+            zs = model.encode(images)
+            if task == 'simclr':
+                images = images[0]
             if i == 0:
-                zs = model.encode(images)
                 ref_zs = zs[:n_examples]
                 ref_images = images[:n_examples]
                 all_zs.append(zs[n_examples:])
                 all_images.append(images[n_examples:])
             else:
-                all_zs.append(model.encode(images))
+                all_zs.append(zs)
                 all_images.append(images)
         all_images = torch.cat(all_images, dim=0)
         all_zs = torch.cat(all_zs, dim=0)
@@ -94,7 +103,7 @@ def display_nearest_neighbors(model, loader, n_examples=4, k=10):
 
         idxs = torch.topk(dists, k, dim=1, largest=False)[1]
         sel_images = torch.index_select(all_images, 0, idxs.view(-1))
-        sel_images = sel_images.view(n_examples, k, *sel_images.images[-3:])
+        sel_images = sel_images.view(n_examples, k, *sel_images.shape[-3:])
 
         ref_images = unnormalize(ref_images.cpu(), 'cifar10')
         ref_images = (ref_images.permute(0, 2, 3, 1) * 255.).numpy().astype('uint8')
@@ -102,29 +111,23 @@ def display_nearest_neighbors(model, loader, n_examples=4, k=10):
 
         for i in range(n_examples):
             print(f'Image {i + 1}')
-            plt.figure()
-            plt.imshow(ref_images[i])
-            plt.imsave(f'img_{i}.png')
+            plt.imsave(f'img_{i}.png', ref_images[i])
 
             grid_img = make_grid(sel_images[i], nrow=10)
             grid_img = (grid_img.permute(1, 2, 0) * 255.).numpy().astype('uint8')
 
             print(f'Top {k} Nearest Neighbors (in latent space)')
-            plt.figure()
-            plt.imshow(grid_img)
-            plt.imsave(f'nn_{i}.png')
+            plt.imsave(f'nn_{i}.png', grid_img)
 
 
 def images_to_cuda(images):
     if isinstance(images, (tuple, list)):
-        bs = images[0].shape[0]
         images = [x.cuda(non_blocking=True) for x in images]
     else:
-        bs = images.shape[0]
         images = images.cuda(non_blocking=True)
     return images
 
 
 model, linear_classifier, train_loader, test_loader = load_model_and_data('simclr')
-evaluate_accuracy(model, linear_classifier, train_loader, test_loader)
-display_nearest_neighbors(model, test_loader)
+#evaluate_accuracy(model, linear_classifier, train_loader, test_loader)
+display_nearest_neighbors('simclr', model, test_loader)

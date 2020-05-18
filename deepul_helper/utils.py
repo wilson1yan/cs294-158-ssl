@@ -37,7 +37,7 @@ def seg_idxs_to_color(segs, palette_fname='palette.pkl'):
 def unnormalize(images, dataset):
     if dataset == 'cifar10':
         mu = [0.4914, 0.4822, 0.4465]
-        stddev = [0.247, 0.243, 0.261]
+        stddev = [0.2023, 0.1994, 0.2010]
     else:
         mu = [0.485, 0.456, 0.406]
         stddev = [0.229, 0.224, 0.225]

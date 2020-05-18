@@ -34,6 +34,34 @@ def seg_idxs_to_color(segs, palette_fname='palette.pkl'):
     return imgs
 
 
+def unnormalize(images, dataset):
+    if dataset == 'cifar10':
+        mu = [0.4914, 0.4822, 0.4465]
+        stddev = [0.247, 0.243, 0.261]
+    else:
+        mu = [0.485, 0.456, 0.406]
+        stddev = [0.229, 0.224, 0.225]
+
+    mu = torch.FloatTensor(mu).view(1, 3, 1, 1)
+    stddev = torch.FloatTensor(stddev).view(1, 3, 1, 1)
+    return images * stddev + mu
+
+
+def accuracy(output, target, topk=(1,)):
+    with torch.no_grad():
+        maxk = max(topk)
+        batch_size = target.size(0)
+
+        _, pred = output.topk(maxk, 1, True, True)
+        pred = pred.t()
+        correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+        res = []
+        for k in topk:
+            correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+            res.append(correct_k.mul_(100.0 / batch_size))
+        return res
+
 class AverageMeter(object):
     """Computes and stores the average and current value"""
     def __init__(self, name, fmt=':f'):

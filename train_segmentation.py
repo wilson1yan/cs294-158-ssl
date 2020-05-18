@@ -11,7 +11,7 @@ import torch.distributed as dist
 import torch.optim.lr_scheduler as lr_scheduler
 from torchvision.utils import save_image
 
-from deepul_helper.utils import AverageMeter, ProgressMeter, remove_module_state_dict, seg_idxs_to_color
+from deepul_helper.utils import AverageMeter, ProgressMeter, remove_module_state_dict, seg_idxs_to_color, unnormalize
 from deepul_helper.data import get_datasets
 from deepul_helper.seg_model import SegmentationModel
 from deepul_helper.tasks import *
@@ -121,16 +121,10 @@ def main():
 
                 target = seg_idxs_to_color(target.cpu())
                 pred = seg_idxs_to_color(pred.cpu())
-                images = unnormalize(images.cpu())
+                images = unnormalize(images.cpu(), 'imagenet')
 
                 to_save = torch.stack((images, target, pred), dim=1).flatten(end_dim=1)
                 save_image(to_save, osp.join(args.seg_dir, f'epoch{epoch}.png'), nrow=10, pad_value=1.)
-
-
-def unnormalize(images):
-    mu = torch.FloatTensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
-    stddev = torch.FloatTensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
-    return images * stddev + mu
 
 
 def train(train_loader, pretrained_model, model, optimizer, epoch, args):

@@ -13,7 +13,7 @@ import torch.multiprocessing as mp
 import torch.optim.lr_scheduler as lr_scheduler
 
 from deepul_helper.tasks import *
-from deepul_helper.utils import AverageMeter, ProgressMeter
+from deepul_helper.utils import AverageMeter, ProgressMeter, accuracy
 from deepul_helper.data import get_datasets
 from deepul_helper.lars import LARS
 
@@ -282,22 +282,6 @@ def save_checkpoint(state, is_best, args, filename='checkpoint.pth.tar'):
     torch.save(state, filename)
     if is_best:
         shutil.copyfile(filename, osp.join(args.output_dir, 'model_best.pth.tar'))
-
-
-def accuracy(output, target, topk=(1,)):
-    with torch.no_grad():
-        maxk = max(topk)
-        batch_size = target.size(0)
-
-        _, pred = output.topk(maxk, 1, True, True)
-        pred = pred.t()
-        correct = pred.eq(target.view(1, -1).expand_as(pred))
-
-        res = []
-        for k in topk:
-            correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
-            res.append(correct_k.mul_(100.0 / batch_size))
-        return res
 
 
 if __name__ == '__main__':

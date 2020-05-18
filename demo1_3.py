@@ -19,7 +19,7 @@ def load_model_and_data(task):
     test_loader = data.DataLoader(test_dset, batch_size=128, num_workers=4,
                                   pin_memory=True)
 
-    ckpt_pth = osp.join('results', f'cifar10_{task}')
+    ckpt_pth = osp.join('results', f'cifar10_{task}', 'model_best.pth.tar')
     ckpt = torch.load(ckpt_pth, map_location='cpu')
 
     if task == 'context_encoder':
@@ -101,7 +101,7 @@ def display_nearest_neighbors(model, loader, n_examples=4, k=10):
         sel_images = unnormalize(sel_images.cpu(), 'cifar10')
 
         for i in range(n_examples):
-            print(f'Image {i + 1}') 
+            print(f'Image {i + 1}')
             plt.figure()
             plt.imshow(ref_images[i])
             plt.imsave(f'img_{i}.png')
@@ -113,7 +113,7 @@ def display_nearest_neighbors(model, loader, n_examples=4, k=10):
             plt.figure()
             plt.imshow(grid_img)
             plt.imsave(f'nn_{i}.png')
-            
+
 
 def images_to_cuda(images):
     if isinstance(images, (tuple, list)):

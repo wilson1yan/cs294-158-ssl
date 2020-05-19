@@ -162,7 +162,7 @@ def show_segmentation():
     seg_model = SegmentationModel(n_classes)
     seg_model.load_state_dict(ckpt['state_dict'])
     seg_model.cuda().eval()
-    
+
     images, target = next(iter(val_loader))
     images, target = images[:12], target[:12]
     images = images.cuda(non_blocking=True)
@@ -177,7 +177,7 @@ def show_segmentation():
 
     to_show = torch.stack((images, target, pred), dim=1).flatten(end_dim=1)
     to_show = make_grid(to_show, nrow=6, pad_value=1.)
-    to_show = (to_show.permute(0, 2, 3, 1) * 255.).numpy().astype('uint8')
+    to_show = (to_show.permute(1, 2, 0) * 255.).numpy().astype('uint8')
 
     plt.figure()
     plt.imshow(to_show)

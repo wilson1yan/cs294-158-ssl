@@ -1,6 +1,8 @@
 import os.path as osp
 from tqdm import tqdm
 
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import torch
@@ -10,7 +12,8 @@ from torchvision.utils import make_grid
 
 from deepul_helper.data import get_datasets
 from deepul_helper.tasks import *
-from deepul_helper.utils import accuracy, unnormalize, remove_module_state_dict
+from deepul_helper.utils import accuracy, unnormalize, remove_module_state_dict, seg_idxs_to_color
+from deepul_helper.seg_model import SegmentationModel
 
 
 def load_model_and_data(task, dataset='cifar10'):
@@ -129,7 +132,7 @@ def images_to_cuda(images):
 
 
 def show_context_encoder_inpainting():
-    model, _, test_loader, tes_loader = load_model_and_data('context_encoder', 'cifar10')
+    model, _, _, test_loader = load_model_and_data('context_encoder', 'cifar10')
     images = next(iter(test_loader))[0][:8]
     with torch.no_grad():
         images = images.cuda(non_blocking=True)
@@ -145,3 +148,37 @@ def show_context_encoder_inpainting():
         plt.figure()
         plt.imshow(grid_img)
 
+
+def show_segmentation():
+    _, val_dset, n_classes = get_datasets('pascalvoc2012', 'segmentation')
+    val_loader = data.DataLoader(val_dset, batch_size=128)
+
+    pretrained_model = SimCLR('imagenet100', 100, None)
+    ckpt = torch.load(osp.join('results', 'imagenet100_simclr', 'seg_model_best.pth.tar'),
+                      map_location='cpu')
+    pretrained_model.load_state_dict(ckpt['pt_state_dict'])
+    pretrained_model.cuda().eval()
+
+    seg_model = SegmentationModel(n_classes)
+    seg_model.load_state_dict(ckpt['state_dict'])
+    seg_model.cuda().eval()
+    
+    images, target = next(iter(val_loader))
+    images, target = images[:12], target[:12]
+    images = images.cuda(non_blocking=True)
+    target = target.cuda(non_blocking=True).long().squeeze(1)
+    features = pretrained_model.get_features(images)
+    _, logits = seg_model(features, target)
+    pred = torch.argmax(logits, dim=1)
+
+    target = seg_idxs_to_color(target.cpu(), 'palette.pkl')
+    pred = seg_idxs_to_color(pred.cpu(), 'palette.pkl')
+    images = unnormalize(images.cpu(), 'imagenet')
+
+    to_show = torch.stack((images, target, pred), dim=1).flatten(end_dim=1)
+    to_show = make_grid(to_show, nrow=6, pad_value=1.)
+    to_show = (to_show.permute(0, 2, 3, 1) * 255.).numpy().astype('uint8')
+
+    plt.figure()
+    plt.imshow(to_show)
+    plt.savefig('seg')

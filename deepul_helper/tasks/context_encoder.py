@@ -85,23 +85,21 @@ class ContextEncoder(nn.Module):
         images_masked[:, 1, 32+4:32+64-4, 32+4:32+64-4] = 2 * 104.0/255.0 - 1.0
         images_masked[:, 2, 32+4:32+64-4, 32+4:32+64-4] = 2 * 123.0/255.0 - 1.0
         return self.encoder(images_masked)
-    
+
     def reconstruct(self, images):
-        # Extract a 64 x 64 center from 128 x 128 image
         images_center = images[:, :, 32:32+64, 32:32+64].clone()
         images_masked = images.clone()
-        # Mask out a 64 x 64 center with no overlap
-        images_masked[:, 0, 32:32+64, 32:32+64] = 2 * 117.0/255.0 - 1.0
-        images_masked[:, 1, 32:32+64, 32:32+64] = 2 * 104.0/255.0 - 1.0
-        images_masked[:, 2, 32:32+64, 32:32+64] = 2 * 123.0/255.0 - 1.0
+        images_masked[:, 0, 32+4:32+64 - 4, 32+4:32+64-4] = 2 * 117.0/255.0 - 1.0
+        images_masked[:, 1, 32+4:32+64 - 4, 32+4:32+64-4] = 2 * 104.0/255.0 - 1.0
+        images_masked[:, 2, 32+4:32+64 - 4, 32+4:32+64-4] = 2 * 123.0/255.0 - 1.0
 
         z = self.encoder(images_masked)
         center_recon = self.decoder(z)
 
         images_recon = images_masked.clone()
         images_recon[:, :, 32:32+64, 32:32+64] = center_recon
-        return images_masked, images_recon 
-        
+        return images_masked, images_recon
+
 
 
 class Flatten(nn.Module):

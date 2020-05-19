@@ -1,8 +1,6 @@
 import os.path as osp
 from tqdm import tqdm
 
-import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import torch
@@ -15,22 +13,22 @@ from deepul_helper.tasks import *
 from deepul_helper.utils import accuracy, unnormalize, remove_module_state_dict
 
 
-def load_model_and_data(task):
-    train_dset, test_dset, n_classes = get_datasets('cifar10', task)
+def load_model_and_data(task, dataset='cifar10'):
+    train_dset, test_dset, n_classes = get_datasets(dataset, task)
     train_loader = data.DataLoader(train_dset, batch_size=128, num_workers=4,
                                    pin_memory=True)
     test_loader = data.DataLoader(test_dset, batch_size=128, num_workers=4,
                                   pin_memory=True)
 
-    ckpt_pth = osp.join('results', f'cifar10_{task}', 'model_best.pth.tar')
+    ckpt_pth = osp.join('results', f'{dataset}_{task}', 'model_best.pth.tar')
     ckpt = torch.load(ckpt_pth, map_location='cpu')
 
     if task == 'context_encoder':
-        model = ContextEncoder('cifar10', n_classes)
+        model = ContextEncoder(dataset, n_classes)
     elif task == 'rotation':
-        model = RotationPrediction('cifar10', n_classes)
+        model = RotationPrediction(dataset, n_classes)
     elif task == 'simclr':
-        model = SimCLR('cifar10', n_classes, None)
+        model = SimCLR(dataset, n_classes, None)
     model.load_state_dict(remove_module_state_dict(ckpt['state_dict']))
 
     model.cuda()
@@ -131,23 +129,19 @@ def images_to_cuda(images):
 
 
 def show_context_encoder_inpainting():
-    model, _, _, test_loader = load_model_and_data('context_encoder')
-    images = next(iter(test_loader))[:8]
+    model, _, test_loader, tes_loader = load_model_and_data('context_encoder', 'cifar10')
+    images = next(iter(test_loader))[0][:8]
     with torch.no_grad():
         images = images.cuda(non_blocking=True)
         images_masked, images_recon = model.reconstruct(images)
-        images_masked = unnormalize('cifar10')
-        images_recon = unnormalize('cifar10')
+        images_masked = unnormalize(images_masked.cpu(), 'cifar10')
+        images_recon = unnormalize(images_recon.cpu(), 'cifar10')
 
-        images = torch.stack((images_masked, images_recon), dim=1).flatten(dim=1).cpu()
+        images = torch.stack((images_masked, images_recon), dim=1).flatten(end_dim=1)
 
         grid_img = make_grid(images, nrow=4)
         grid_img = (grid_img.permute(1, 2, 0) * 255.).numpy().astype('uint8')
 
         plt.figure()
         plt.imshow(grid_img)
-        plt.imsave('ce.png')
 
-
-if __name__ == '__main__':
-    show_context_encoder_inpainting()

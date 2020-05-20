@@ -78,7 +78,11 @@ def display_nearest_neighbors(task, model, loader, n_examples=4, k=16):
         all_images, all_zs = [], []
         for i, (images, _) in enumerate(loader):
             images = images_to_cuda(images)
-            zs = model.encode(images).flatten(start_dim=1)
+            zs = model.encode(images)
+
+            images = images.cpu()
+            zs = zs.cpu()
+
             if task == 'simclr':
                 images = images[0]
             if i == 0:
@@ -89,6 +93,7 @@ def display_nearest_neighbors(task, model, loader, n_examples=4, k=16):
             else:
                 all_zs.append(zs)
                 all_images.append(images)
+        import ipdb; ipdb.set_trace()
         all_images = torch.cat(all_images, dim=0)
         all_zs = torch.cat(all_zs, dim=0)
 
@@ -183,4 +188,11 @@ def show_segmentation():
     plt.figure()
     plt.axis('off')
     plt.imshow(to_show)
+<<<<<<< Updated upstream
     plt.show()
+=======
+    plt.savefig('seg')
+
+model, linear_classifier, train_loader, test_loader = load_model_and_data('context_encoder')
+display_nearest_neighbors('context_encoder', model, test_loader)
+>>>>>>> Stashed changes

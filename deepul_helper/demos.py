@@ -78,7 +78,11 @@ def display_nearest_neighbors(task, model, loader, n_examples=4, k=16):
         all_images, all_zs = [], []
         for i, (images, _) in enumerate(loader):
             images = images_to_cuda(images)
-            zs = model.encode(images).flatten(start_dim=1)
+            zs = model.encode(images)
+
+            images = images.cpu()
+            zs = zs.cpu()
+
             if task == 'simclr':
                 images = images[0]
             if i == 0:
@@ -92,9 +96,9 @@ def display_nearest_neighbors(task, model, loader, n_examples=4, k=16):
         all_images = torch.cat(all_images, dim=0)
         all_zs = torch.cat(all_zs, dim=0)
 
-        aa = ref_zs.sum(dim=1).unsqueeze(dim=1)
+        aa = (ref_zs ** 2).sum(dim=1).unsqueeze(dim=1)
         ab = torch.matmul(ref_zs, all_zs.t())
-        bb = all_zs.sum(dim=1).unsqueeze(dim=0)
+        bb = (all_zs ** 2).sum(dim=1).unsqueeze(dim=0)
         dists = torch.sqrt(aa - 2 * ab + bb)
 
         idxs = torch.topk(dists, k, dim=1, largest=False)[1]
@@ -184,3 +188,4 @@ def show_segmentation():
     plt.axis('off')
     plt.imshow(to_show)
     plt.show()
+

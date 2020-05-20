@@ -59,7 +59,6 @@ class ContextEncoder(nn.Module):
 
     def construct_classifier(self):
         classifier = nn.Sequential(
-            Flatten(),
             nn.BatchNorm1d(self.latent_dim, affine=False),
             nn.Linear(self.latent_dim, self.n_classes)
         )
@@ -80,11 +79,11 @@ class ContextEncoder(nn.Module):
         return dict(Loss=F.mse_loss(center_recon, images_center)), torch.flatten(z, 1)
 
     def encode(self, images):
-        images_masked = images
+        images_masked = images.clone()
         images_masked[:, 0, 32+4:32+64-4, 32+4:32+64-4] = 2 * 117.0/255.0 - 1.0
         images_masked[:, 1, 32+4:32+64-4, 32+4:32+64-4] = 2 * 104.0/255.0 - 1.0
         images_masked[:, 2, 32+4:32+64-4, 32+4:32+64-4] = 2 * 123.0/255.0 - 1.0
-        return self.encoder(images_masked)
+        return self.encoder(images_masked).flatten(start_dim=1)
 
     def reconstruct(self, images):
         images_center = images[:, :, 32:32+64, 32:32+64].clone()
@@ -99,12 +98,3 @@ class ContextEncoder(nn.Module):
         images_recon = images_masked.clone()
         images_recon[:, :, 32:32+64, 32:32+64] = center_recon
         return images_masked, images_recon
-
-
-
-class Flatten(nn.Module):
-    def __init__(self):
-        super(Flatten, self).__init__()
-
-    def forward(self, feat):
-        return feat.view(feat.size(0), -1)

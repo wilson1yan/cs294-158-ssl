@@ -27,6 +27,7 @@ class RotationPrediction(nn.Module):
     def construct_classifier(self):
         if self.dataset == 'cifar10':
             classifier = nn.Sequential(
+                nn.Flatten(),
                 nn.BatchNorm1d(self.latent_dim, affine=False),
                 nn.Linear(self.latent_dim, self.n_classes)
             )
@@ -53,11 +54,11 @@ class RotationPrediction(nn.Module):
         correct = pred.eq(targets).float().sum()
         acc = correct / targets.shape[0] * 100.
 
-        return dict(Loss=loss, Acc1=acc), zs[:batch_size].flatten(start_dim=1)
+        return dict(Loss=loss, Acc1=acc), zs[:batch_size]
 
-    def encode(self, images):
-        zs = self.model(images, out_feat_keys=(self.feat_layer,)).flatten(start_dim=1)
-        return zs
+    def encode(self, images, flatten=True):
+        zs = self.model(images, out_feat_keys=(self.feat_layer,))
+        return zs.flatten(start_dim=1)
 
     def _preprocess(self, images):
         batch_size = images.shape[0]

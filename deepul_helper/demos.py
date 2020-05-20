@@ -1,5 +1,4 @@
 import os.path as osp
-from tqdm import tqdm
 
 import matplotlib
 matplotlib.use('Agg')
@@ -59,7 +58,6 @@ def evaluate_accuracy(model, linear_classifier, train_loader, test_loader):
 def evaluate_classifier(model, linear_classifier, loader):
     correct1, correct5 = 0, 0
     with torch.no_grad():
-        pbar = tqdm(total=len(loader.dataset))
         for images, target in loader:
             images = images_to_cuda(images)
             target = target.cuda(non_blocking=True)
@@ -70,9 +68,6 @@ def evaluate_classifier(model, linear_classifier, loader):
 
             correct1 += acc1.item() * logits.shape[0]
             correct5 += acc5.item() * logits.shape[0]
-
-            pbar.update(logits.shape[0])
-        pbar.close()
     total = len(loader.dataset)
 
     return correct1 / total, correct5 / total

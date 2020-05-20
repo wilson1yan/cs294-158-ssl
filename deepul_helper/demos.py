@@ -189,5 +189,3 @@ def show_segmentation():
     plt.imshow(to_show)
     plt.show()
 
-model, linear_classifier, train_loader, test_loader = load_model_and_data('context_encoder')
-display_nearest_neighbors('context_encoder', model, test_loader)

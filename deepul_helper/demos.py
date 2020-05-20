@@ -85,8 +85,6 @@ def display_nearest_neighbors(task, model, loader, n_examples=4, k=16):
             images = images.cpu()
             zs = zs.cpu()
 
-            if task == 'simclr':
-                images = images[0]
             if i == 0:
                 ref_zs = zs[:n_examples]
                 ref_images = images[:n_examples]

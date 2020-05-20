@@ -27,7 +27,6 @@ class RotationPrediction(nn.Module):
     def construct_classifier(self):
         if self.dataset == 'cifar10':
             classifier = nn.Sequential(
-                Flatten(),
                 nn.BatchNorm1d(self.latent_dim, affine=False),
                 nn.Linear(self.latent_dim, self.n_classes)
             )
@@ -35,7 +34,7 @@ class RotationPrediction(nn.Module):
             classifier = nn.Sequential(
                 nn.AdaptiveMaxPool2d((6, 6)),
                 nn.BatchNorm2d(256, affine=False),
-                Flatten(),
+                nn.Flatten(),
                 nn.Linear(256 * 6 * 6, self.n_classes)
             )
         else:
@@ -54,10 +53,10 @@ class RotationPrediction(nn.Module):
         correct = pred.eq(targets).float().sum()
         acc = correct / targets.shape[0] * 100.
 
-        return dict(Loss=loss, Acc1=acc), zs[:batch_size]
+        return dict(Loss=loss, Acc1=acc), zs[:batch_size].flatten(start_dim=1)
 
     def encode(self, images):
-        zs = self.model(images, out_feat_keys=(self.feat_layer,))
+        zs = self.model(images, out_feat_keys=(self.feat_layer,)).flatten(start_dim=1)
         return zs
 
     def _preprocess(self, images):
@@ -209,13 +208,6 @@ class NetworkInNetwork(nn.Module):
 
 
 # AlexNet
-class Flatten(nn.Module):
-    def __init__(self):
-        super(Flatten, self).__init__()
-
-    def forward(self, feat):
-        return feat.view(feat.size(0), -1)
-
 class AlexNet(nn.Module):
     def __init__(self):
         super(AlexNet, self).__init__()
@@ -252,7 +244,7 @@ class AlexNet(nn.Module):
 
         num_pool5_feats = 6 * 6 * 256
         fc_block = nn.Sequential(
-            Flatten(),
+            nn.Flatten(),
             nn.Linear(num_pool5_feats, 4096, bias=False),
             nn.BatchNorm1d(4096),
             nn.ReLU(inplace=True),

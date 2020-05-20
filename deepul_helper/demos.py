@@ -184,7 +184,7 @@ def show_segmentation():
     to_show = make_grid(to_show, nrow=6, pad_value=1.)
     to_show = (to_show.permute(1, 2, 0) * 255.).numpy().astype('uint8')
 
-    plt.figure()
+    plt.figure(figsize=(12, 12))
     plt.axis('off')
     plt.imshow(to_show)
     plt.show()

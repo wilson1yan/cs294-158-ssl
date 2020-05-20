@@ -78,7 +78,7 @@ def display_nearest_neighbors(task, model, loader, n_examples=4, k=10):
         all_images, all_zs = [], []
         for i, (images, _) in enumerate(loader):
             images = images_to_cuda(images)
-            zs = model.encode(images).flatten()
+            zs = model.encode(images).flatten(start_dim=1)
             if task == 'simclr':
                 images = images[0]
             if i == 0:

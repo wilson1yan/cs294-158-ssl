@@ -18,9 +18,9 @@ from deepul_helper.seg_model import SegmentationModel
 def load_model_and_data(task, dataset='cifar10'):
     train_dset, test_dset, n_classes = get_datasets(dataset, task)
     train_loader = data.DataLoader(train_dset, batch_size=128, num_workers=4,
-                                   pin_memory=True)
+                                   pin_memory=True, shuffle=True)
     test_loader = data.DataLoader(test_dset, batch_size=128, num_workers=4,
-                                  pin_memory=True)
+                                  pin_memory=True, shuffle=True)
 
     ckpt_pth = osp.join('results', f'{dataset}_{task}', 'model_best.pth.tar')
     ckpt = torch.load(ckpt_pth, map_location='cpu')

@@ -73,7 +73,7 @@ def evaluate_classifier(model, linear_classifier, loader):
     return correct1 / total, correct5 / total
 
 
-def display_nearest_neighbors(task, model, loader, n_examples=4, k=10):
+def display_nearest_neighbors(task, model, loader, n_examples=4, k=16):
     with torch.no_grad():
         all_images, all_zs = [], []
         for i, (images, _) in enumerate(loader):
@@ -112,7 +112,7 @@ def display_nearest_neighbors(task, model, loader, n_examples=4, k=10):
             plt.imshow(ref_images[i])
             plt.show()
 
-            grid_img = make_grid(sel_images[i], nrow=10)
+            grid_img = make_grid(sel_images[i], nrow=4)
             grid_img = (grid_img.permute(1, 2, 0) * 255.).numpy().astype('uint8')
 
             print(f'Top {k} Nearest Neighbors (in latent space)')

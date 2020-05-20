@@ -188,11 +188,7 @@ def show_segmentation():
     plt.figure()
     plt.axis('off')
     plt.imshow(to_show)
-<<<<<<< Updated upstream
     plt.show()
-=======
-    plt.savefig('seg')
 
 model, linear_classifier, train_loader, test_loader = load_model_and_data('context_encoder')
 display_nearest_neighbors('context_encoder', model, test_loader)
->>>>>>> Stashed changes

@@ -78,6 +78,8 @@ def display_nearest_neighbors(task, model, loader, n_examples=4, k=16):
         all_images, all_zs = [], []
         for i, (images, _) in enumerate(loader):
             images = images_to_cuda(images)
+            if task == 'simclr':
+                images = images[0]
             zs = model.encode(images)
 
             images = images.cpu()

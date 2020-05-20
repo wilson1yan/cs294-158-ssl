@@ -82,7 +82,7 @@ class SimCLR(nn.Module):
         return dict(Loss=loss), hi
 
     def encode(self, images):
-        return self.resnet(images[0])
+        return self.resnet(images)
 
     def get_features(self, images):
         return self.resnet.get_features(images)

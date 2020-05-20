@@ -113,14 +113,18 @@ def display_nearest_neighbors(task, model, loader, n_examples=4, k=10):
         for i in range(n_examples):
             print(f'Image {i + 1}')
             plt.figure()
+            plt.axis('off')
             plt.imshow(ref_images[i])
+            plt.show()
 
             grid_img = make_grid(sel_images[i], nrow=10)
             grid_img = (grid_img.permute(1, 2, 0) * 255.).numpy().astype('uint8')
 
             print(f'Top {k} Nearest Neighbors (in latent space)')
             plt.figure()
+            plt.axis('off')
             plt.imshow(grid_img)
+            plt.show()
 
 
 def images_to_cuda(images):
@@ -146,7 +150,9 @@ def show_context_encoder_inpainting():
         grid_img = (grid_img.permute(1, 2, 0) * 255.).numpy().astype('uint8')
 
         plt.figure()
+        plt.axis('off')
         plt.imshow(grid_img)
+        plt.show()
 
 
 def show_segmentation():
@@ -180,5 +186,6 @@ def show_segmentation():
     to_show = (to_show.permute(1, 2, 0) * 255.).numpy().astype('uint8')
 
     plt.figure()
+    plt.axis('off')
     plt.imshow(to_show)
-    plt.savefig('seg')
+    plt.show()

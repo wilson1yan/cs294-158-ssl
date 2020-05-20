@@ -93,13 +93,12 @@ def display_nearest_neighbors(task, model, loader, n_examples=4, k=16):
             else:
                 all_zs.append(zs)
                 all_images.append(images)
-        import ipdb; ipdb.set_trace()
         all_images = torch.cat(all_images, dim=0)
         all_zs = torch.cat(all_zs, dim=0)
 
-        aa = ref_zs.sum(dim=1).unsqueeze(dim=1)
+        aa = (ref_zs ** 2).sum(dim=1).unsqueeze(dim=1)
         ab = torch.matmul(ref_zs, all_zs.t())
-        bb = all_zs.sum(dim=1).unsqueeze(dim=0)
+        bb = (all_zs ** 2).sum(dim=1).unsqueeze(dim=0)
         dists = torch.sqrt(aa - 2 * ab + bb)
 
         idxs = torch.topk(dists, k, dim=1, largest=False)[1]

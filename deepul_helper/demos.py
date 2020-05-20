@@ -98,12 +98,13 @@ def display_nearest_neighbors(task, model, loader, n_examples=4, k=16):
         dists = torch.sqrt(aa - 2 * ab + bb)
 
         idxs = torch.topk(dists, k, dim=1, largest=False)[1]
+        print(idxs)
         sel_images = torch.index_select(all_images, 0, idxs.view(-1))
+        sel_images = unnormalize(sel_images.cpu(), 'cifar10')
         sel_images = sel_images.view(n_examples, k, *sel_images.shape[-3:])
 
         ref_images = unnormalize(ref_images.cpu(), 'cifar10')
         ref_images = (ref_images.permute(0, 2, 3, 1) * 255.).numpy().astype('uint8')
-        sel_images = unnormalize(sel_images.cpu(), 'cifar10')
 
         for i in range(n_examples):
             print(f'Image {i + 1}')

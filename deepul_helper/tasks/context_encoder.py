@@ -59,6 +59,7 @@ class ContextEncoder(nn.Module):
 
     def construct_classifier(self):
         classifier = nn.Sequential(
+            nn.Flatten(),
             nn.BatchNorm1d(self.latent_dim, affine=False),
             nn.Linear(self.latent_dim, self.n_classes)
         )
